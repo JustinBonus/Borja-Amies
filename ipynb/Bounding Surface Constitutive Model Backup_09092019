@@ -1,0 +1,4358 @@
+from IPython.display import HTML
+from IPython.display import display
+#import IPython.core.display as di # Example: di.display_html('<h3>%s:</h3>' % str, raw=True)
+#di.display_html('<script>jQuery(function() {if (jQuery("body.notebook_app").length == 0) { jQuery("div.input").toggle(); jQuery("div.input").toggle();}});</script>', raw=True)
+#di.display_html('''<button onclick="jQuery('div.input').toggle(); jQuery('div.input').toggle();">Toggle code</button>''', raw=True)
+
+#BREAK
+
+# For basic math, arrays, and structures
+import numpy as np
+from collections import namedtuple
+
+#BREAK
+
+def dev(A):
+    # Returns the deviatoric portion of a second order tensor A
+    if A.shape == (3, 3):
+        #tensor represented as 3x3 matrix
+        traceA = sum(A[i][i] for i in range(n))
+        s = A - traceA/3 * np.eye(3)
+    elif A.shape == (6,1) or A.shape == (1,6) or A.shape == (6,):
+        #tensor represented as 6x1, 1x6, 6x, and transpose vectors
+        s = A
+        traceA = trace(A)
+        #numpy has some issues with 1D arrays, had to index value of traceA for cases differently
+        if A.shape == (6,1):
+            svol = np.array([[traceA/3],[traceA/3],[traceA/3],[0],[0],[0]])
+            s = s - svol  
+        else:
+            svol = np.array([traceA/3,traceA/3,traceA/3,0,0,0])
+            s = s - svol
+    elif A.shape == (3,1) or A.shape == (1,3) or A.shape(3,):
+        #tensor represented as 3x1, 1x3, 3x, AKA principal stress form
+        A = A.reshape(3,1)
+        s = A
+        traceA = trace(A)
+        svol = np.array([[traceA/3],[traceA/3],[traceA/3]]).reshape(3,1)
+        s = s - svol
+        
+    else:
+        print('Error: Unsupported representation of second order tensor in dev() function')
+    return s
+
+def trace(A):
+    # Returns the trace of a second order tensor A
+    n=3 
+    if A.shape == (3, 3):
+        #tensor represented as 3x3 matrix
+        val = sum(A[i][i] for i in range(n))
+    elif A.shape == (6,1) or A.shape == (6,) or A.shape == (1,6):
+        #tensor represented as 6x1 matrix
+        A = A.reshape(6,1)
+        val = float(sum(A[i] for i in range(n)))
+    elif A.shape == (3,1) or A.shape == (1,3) or A.shape(3,):
+        A = A.reshape(3,1)
+        val = float(sum(A[i] for i in range(n)))
+    else:
+        print('Error: Unsupported representation of second order tensor in trace() function')
+    return val
+
+def GetIvol():
+    Vol = np.zeros((6,6)) #4th Volumetric
+    for x in range(0, 3):
+        for y in range(0, 3):
+            Vol[x,y] = 1/3
+            Vol[x,y] = 1/3
+    return Vol
+
+def GetI():
+    One = np.eye(6) #4th Identity
+    return One
+
+def GetIdev(): 
+    #Create 6x6 4th order deviatoric, 1/2 tail values
+    factor = 2
+    one3rd = 1/3
+    oneHalf = 0.5
+    #Dev = np.array([[np.eye(3) - np.multiply(one3rd, np.ones((3,3))), np.zeros((3,3))],
+    #                [np.zeros((3,3)), np.multiply(oneHalf, np.eye(3))]])
+    Dev = GetI() - GetIvol() #4th Deviatoric
+    for x in range (3,6):
+        for y in range (3,6):
+            Dev[x,y] = Dev[x,y]/factor
+    return Dev
+
+def GetIdev1(): 
+    #Create 6x6 4th order deviatoric, 'factor' tail values
+    one3rd = 1/3
+    factor = 1
+    #Dev = np.array([[np.eye(3) - np.multiply(one3rd, np.ones((3,3))), np.zeros((3,3))],
+    #                [np.zeros((3,3)), np.multiply(factor, np.eye(3))]])
+    Dev = I() - Ivol() #4th Deviatoric
+    for x in range (3,6):
+        for y in range (3,6):
+            Dev[x,y] = Dev[x,y]/factor    
+    return Dev
+
+def GetCe(mStatic):
+    # Create the Elastic 4th Order Modulus
+    # elastic stiffness tensor (matrix_hh)
+    a = 2*mStatic.G 
+    b = mStatic.K - a/3 # K + 4/3G
+    #b = mStatic.E  / (3 - 6*mStatic.v) - a / 3;
+    #mC = np.array([[np.multiply(a, np.eye(3)) + np.multiply(b, np.ones((3,3))),  np.zeros((3,3))],
+    #   [np.zeros((3,3)) , np.multiply(mStatic.G, np.eye(3))]])
+    mC = 3*mStatic.K*GetIvol() + 2*mStatic.G*GetIdev()     
+    return mC
+
+def GetJ2(A): 
+    if A.shape == (3,3):
+        #This is just to remain consistent with the MATLAB file, will revamp
+        m = 1/3 * (A[0,0]+A[1,0]+A[2,0])
+        hold = np.zeros((6,1))
+        hold[0] = A[0,0] - m 
+        hold[1] = A[1,0] - m
+        hold[2] = A[2,0] - m
+        out = 0.5 * (hold[0]*hold[0] + hold[1]*hold[1] + hold[2]*hold[2] + 2*(A[0,1]*A[0,1] + A[1,1]*A[1,1] + A[2,1]*A[2,1]))
+        out = out[0]
+    elif A.shape == (6,) or A.shape == (6,1) or A.shape == (1,6):    
+        #J2 of 6x1 and 1x6 inputs
+        A = A.reshape(6,1) #force 6x1 dimension for calculation
+        m = 1/3 * (A[0] + A[1] + A[2])
+        hold = np.zeros((6,1))
+        hold[0] = A[0] - m 
+        hold[1] = A[1] - m
+        hold[2] = A[2] - m
+        out = 0.5 * (hold[0]*hold[0] + hold[1]*hold[1] + hold[2]*hold[2] + 2*(A[3]*A[3] + A[4]*A[4] + A[5]*A[5]))
+        out = out[0]
+    return out
+
+def innerProduct( X, Y, type):
+    #inner = X.*Y for type = stress, strain, or neutral storage
+    inner = 0.0
+    if X.shape == (3, 3):
+        #tensor represented as 3x3
+        inner = np.multiply(X,Y) # Outputs (3,3) array
+    elif X.shape == (6,1) or X.shape == (6,) or X.shape == (1,6):
+        X = X.reshape(6,1)
+        Y = Y.reshape(6,1)
+        #Pseudo-switch
+        switcher = {
+            1: 2.0, #Stress
+            2: 0.5, #Strain
+            3: 1.0  #stress:strain
+        }
+        modifier = switcher.get(type, "Invalid type in innerProduct()")
+        for i in range(0, len(X)):
+            inner = inner + X[i]*Y[i]
+            inner = inner[0] # Output scalar
+            if i > 2:
+                inner = inner + (modifier - 1.0)*X[i]*Y[i]
+                inner = inner[0] # Output scalar
+    elif X.shape == (3,1) or X.shape == (3,) or X.shape == (1,3):
+        X = X.reshape(3,1)
+        Y = Y.reshape(3,1)
+        for i in range(0, len(X)):
+            inner = inner + X[i]*Y[i]
+            inner = inner[0]
+    else:
+        print('Unsupported representation of second order tensor in innerProduct()')
+    return inner
+
+def normE(A):
+    #val = normE(A) returns the norm of a second order tensor A (strain type)
+    if A.shape == (3,3):
+        #tensor represented as 3x3
+        A2 = np.zeros((3,3))
+        A2 = sum(A[i]*A[i] for i in range(0,len(A)))
+        val = np.sqrt(sum(A2))
+    elif A.shape == (6,1) or A.shape == (6,) or A.shape == (1,6):
+        A = A.reshape(6,1)
+        A2 = np.zeros((6,1))
+        for i in range(0,len(A)):
+            A2[i] = A[i]*A[i] 
+        val = np.sqrt(sum(A2[i] for i in range(0,3)) + 0.5*sum(A2[i] for i in range(3,6)))
+    elif A.shape == (3,1) or A.shape == (3,) or A.shape == (1,3):
+        #tensor represented as 3x1 or 1x3
+        A = A.reshape(3,1)
+        A2 = np.zeros(3).reshape(3,1)
+        for i in range(0,len(A)):
+            A2[i] = A[i]*A[i]
+        val = np.sqrt(sum(A2[i] for i in range(0,3)))
+    else:
+        print('Unsupported representation of second order tensor in normE()')
+        val = 0
+    return val
+
+def normS(A):
+    #val = normS(A) returns the norm of a second order tensor A (stress type)
+    if A.shape == (3,3):
+        #tensor represented as 3x3
+        A2 = np.zeros((3,3))
+        A2 = sum(A[i]*A[i] for i in range(0,len(A)))
+        val = np.sqrt(sum(A2))
+    elif A.shape == (6,1) or A.shape == (6,) or A.shape == (1,6):
+        #tensor represented as 6x1 or 1x6
+        A = A.reshape(6,1)
+        A2 = np.zeros(6).reshape(6,1)
+        for i in range(0,len(A)):
+            A2[i] = A[i]*A[i] 
+        val = np.sqrt(sum(A2[i] for i in range(0,3)) + 2*sum(A2[i] for i in range(3,6)))
+    elif A.shape == (3,1) or A.shape == (3,) or A.shape == (1,3):
+        #tensor represented as 3x1 or 1x3
+        A = A.reshape(3,1)
+        A2 = np.zeros(3).reshape(3,1)
+        for i in range(0,len(A)):
+            A2[i] = A[i]*A[i]
+        val = np.sqrt(sum(A2[i] for i in range(0,3)))
+    else:
+        print('Unsupported representation of second order tensor in normS()')
+        val = 0
+    return val
+
+def vectorNorm(X, type):
+    #norm(X) in type = stress, strain or neutral storage format
+    vNorm = np.sqrt(innerProduct(X,X,type))
+    return vNorm
+
+def evalH(param, kappa):
+    #s = evalH(param, kappa) returns the value of H=h*kappa^m (AKA exponential hardening moduli)
+    if kappa < 0:
+        s = 1.0e-10
+        return s
+    s = param.hh*(kappa)**param.mm
+    return s
+
+def convert2StressLike(A):
+    #stress = normS(A) .. returns a stress like second order tesnor A
+    #                  (in stress type storage)
+    if A.shape == (3,3):
+        #tensor represented as 3x3 matrix
+        hold = A
+    elif A.shape == (6,1) or A.shape == (6,) or A.shape == (1,6):
+        #tensor represented as 6x1 or 1x6
+        A = A.reshape(6,1)
+        hold = np.zeros((6,1))
+        hold[0] = A[0]
+        hold[1] = A[1]
+        hold[2] = A[2]
+        hold[3] = 0.5*A[3]
+        hold[4] = 0.5*A[4]
+        hold[5] = 0.5*A[5]
+    else:
+        print('Unsupported representation of second order tensor in convert2StressLike()')
+    return hold
+
+def hydroProjector(stress, type):
+    # Justin Bonus, July 2019
+    # Project forms of stress vectors onto a plane orthogonal to the hydrostatic axis, centered at the origin
+    # U_{proj-plane} = U - ((U dot n)/(||n||^2))n
+    # U = [s_11, s_22, s_33, s_12, s_23, s_13]; n = Vector normal to \pi-plane
+    # U = [s_1, s_2, s_3]
+    #===================================
+    #Type 0 for for top 3 cells of 6x1, 1 for bottom 3 cells of 6x1, 2 for 3x1 principal form
+    #===================================
+    #Be careful that the correct unit vector is being used or an offset to the projected plane will occur 
+    #Not a major issue when viewing figure in 'ortho' 
+    import numpy as np
+    #stress = stress.reshape(1,6)
+    def zero(stress):
+        #Projecting 3x1 normal principal vectors onto the \Pi-plane
+        #Converting to 6x1 in order to use other functions that are called
+        zero.vec = np.array([1,1,1,0,0,0])
+        zero.norm_vec = normS(zero.vec)
+        zero.unit_vec = zero.vec/zero.norm_vec
+        zero.norm_unit_vec = normS(zero.unit_vec)
+        zero.proj_stress = stress - ((innerProduct(stress,zero.unit_vec,1))/(zero.norm_unit_vec**2))*zero.unit_vec
+        return zero.proj_stress
+    def one(stress):
+        one.vec = np.array([0,0,0,1,1,1])
+        one.norm_vec = normS(one.vec)
+        one.unit_vec = one.vec/one.norm_vec
+        one.norm_unit_vec = normS(one.unit_vec)
+        one.proj_stress = stress - ((innerProduct(stress,one.unit_vec,1))/(one.norm_unit_vec**2))*one.unit_vec
+        return one.proj_stress
+    def two(stress):
+        two.vec = np.array([1,1,1])
+        two.norm_vec = normS(two.vec)
+        two.unit_vec = two.vec/two.norm_vec
+        two.norm_unit_vec = normS(two.unit_vec)
+        two.proj_stress = stress - ((innerProduct(stress,two.unit_vec,1))/(two.norm_unit_vec**2))*two.unit_vec
+        return two.proj_stress        
+    
+    switch_type = {
+        1: zero,
+        2: one,
+        3: two
+    }
+    #Pseudo-switch
+    case = switch_type.get(type+1, lambda: "Invalid projection type")
+    case(stress) #Runs the projection function.
+    proj_stress = case.proj_stress
+    return proj_stress
+
+def vectorAngle(vec1, vec2, type):
+    # First take the dev() and hydroProjector() of the vectors if measuring
+    # angle from deviatoric view
+    #
+    #if vec1.shape == (6,1) or vec1.shape(6,) or vec1.shape == (1,6):
+    #theta = cos-1((u dot v)/(||u|| dot ||v||))
+    switch_type = {
+        1: 2, #Stress
+        2: 0.5, #Strain
+        3: 1 #Stress Strain
+    }
+    factor = switch_type.get(type, 'Invalid type')
+    angle = float(np.arccos(innerProduct(vec1, vec2,1)/(normS(vec1)*normS(vec2)))*(180/np.pi)) #Degrees     
+    #else:
+    #angle = 'Incorrect input vector shape'
+    return angle
+
+def princVal(vec, type):
+    #Based on the code of Robert Siegwart, 2019
+    #Edited by Justin Bonus, July 2019
+    #type = 0 returns normal principals
+    #type = 1 returns shear principals
+    import numpy as np
+    
+    if vec.shape == (3,3):
+        S = vec
+    elif vec.shape == (6,1) or vec.shape == (6,) or vec.shape == (1,6):  
+        vec = vec.reshape(6,1)
+        S = np.array([[vec[0], vec[3], vec[5]],
+                       [vec[3], vec[1], vec[4]],
+                       [vec[5], vec[4], vec[2]] ])
+        S = S.reshape(3,3)
+    else:
+        print('Unsupported vector shape in principal()')
+    
+    e_val, e_vec = np.linalg.eig(S) #Solve for eigenvalues and eigenvectors
+    p3, p2, p1 = np.sort(e_val)   #Sort smallest to largest
+    #p1, p2, p3 = e_val
+    
+    if type == 1:
+        p1 = (p1+p3)/2
+        p2 = (p1+p2)/2
+        p3 = (p2+p3)/2
+
+    return p1, p2, p3
+
+def princVec(vec, type):
+    #Based on the code of Robert Siegwart, 2019
+    #Edited by Justin Bonus, July 2019
+    #type = 0 returns normal principals
+    #type = 1 returns shear principals
+    import numpy as np
+    
+    if vec.shape == (3,3):
+        S = vec
+    elif vec.shape == (6,1) or vec.shape == (6,) or vec.shape == (1,6):  
+        vec = vec.reshape(6,1)
+        S = np.array([[vec[0], vec[3], vec[5]],
+                       [vec[3], vec[1], vec[4]],
+                       [vec[5], vec[4], vec[2]] ]).reshape(3,3)
+
+    else:
+        print('Unsupported vector shape in principal()')
+    
+    e_val, e_vec = np.linalg.eig(S) #Solve for eigenvalues and eigenvectors
+    p3, p2, p1 = np.sort(e_val)   #Sort smallest to largest
+    #p1, p2, p3 = e_val
+    e_val_l = e_val.tolist() #Python list
+    p1_index, p2_index, p3_index = e_val_l.index(p1), e_val_l.index(p2), e_val_l.index(p3)
+    p1_vec, p2_vec, p3_vec = e_vec[:,p1_index], e_vec[:,p2_index], e_vec[:,p3_index]
+    
+    if type == 1:
+        tau1 = (p1+p3)/2
+        tau2 = (p1+p2)/2
+        tau3 = (p2+p3)/2
+        p1_vec = (p1_vec + p3_vec)/np.linalg.norm(p1_vec+p3_vec)
+        p2_vec = (p1_vec + p2_vec)/np.linalg.norm(p1_vec+p2_vec)
+        p3_vec = (p2_vec + p3_vec)/np.linalg.norm(p2_vec+p3_vec)
+
+    return p1_vec, p2_vec, p3_vec
+
+#BREAK
+
+def sixToPrincipal(stress):
+    # Invaraiant alternative to eigenvalue/vector method for converting 6x1 stress to 3x1 principal stress
+    # Justin Bonus, Aug 15 2019
+    # Check if stress is the zero vector
+    if np.all(stress == 0):
+        princ = np.array([0,0,0]).reshape(3,1)
+    else:
+        stress = stress.reshape(6,1)
+        I1 = stress[0] + stress[1] + stress[2]
+        I2 = stress[0]*stress[1] + stress[1]*stress[2] + stress[2]*stress[0] - stress[3]**2 - stress[4]**2 - stress[5]**2
+        I3 = stress[0]*stress[1]*stress[2] - stress[0]*(stress[4]**2) - stress[1]*(stress[5]**2) - stress[2]*(stress[3]**2) + 2*stress[3]*stress[4]*stress[5]
+        phi = (1/3)*np.arccos((2*I1**3 - 9*I1*I2 + 27*I3)/(2*(I1**2 - 3*I2)**(3/2)))
+        p1 = (I1/3) + (2/3)*(np.sqrt(I1**2 - 3*I2))*np.cos(phi)
+        p2 = (I1/3) + (2/3)*(np.sqrt(I1**2 - 3*I2))*np.cos(phi - 2*np.pi/3)
+        p3 = (I1/3) + (2/3)*(np.sqrt(I1**2 - 3*I2))*np.cos(phi - 4*np.pi/3)
+        princ = np.array([p1,p2,p3]).reshape(3,1)
+    return princ
+
+def princToSix(stress, key):
+    # Intakes 3x3, 3x1, 3,, or 1x3 principal stress
+    # A 'key' is needed to maintain polarity
+    if stress.shape == (3,1) or stress.shape == (3,) or stress.shape == (1,3):
+        stress = stress.reshape(3,1)
+    return six
+
+def nineToSix(stress):
+    # Intakes 3x3 stress, outputs 6x1
+    six = np.array([0,0,0,0,0,0]).reshape(6,1)
+    six[0] = stress[0,0]; six[1] = stress[1,1]; six[2] = stress[2,2]
+    six[3] = stress[0,1]; six[4] = stress[1,2]; six[5] = stress[0,2]
+    return six
+
+def sixToNine(stress):
+    # Intakes 6x1 stress, outputs 3x3
+    nine = np.array([[0,0,0],[0,0,0],[0,0,0]])
+    nine[0,0] = stress[0]; nine[1,1] = stress[1]; nine[2,2] = stress[2]
+    nine[0,1] = stress[3]; nine[1,2] = stress[4]; nine[0,2] = stress[5]
+    nine[1,0] = stress[3]; nine[2,1] = stress[4]; nine[2,0] = stress[5]
+    return nine
+
+#BREAK
+
+six = np.array([0,0,0,-1,0,0])
+print('Stress:', six)
+princ = sixToPrincipal(six)
+
+p1, p2, p3 = princVal(six,0)
+t1, t2, t3 = princVal(six,1)
+p1_vec, p2_vec, p3_vec = princVec(six,0)
+p_vec = np.append(p1_vec.reshape(3,1), p2_vec.reshape(3,1), axis=1)
+p_vec = np.append(p_vec, p3_vec.reshape(3,1), axis=1)
+t1_vec, t2_vec, t3_vec = princVec(six,1)
+t_vec = np.append(t1_vec.reshape(3,1), t2_vec.reshape(3,1), axis=1)
+t_vec = np.append(t_vec, t3_vec.reshape(3,1), axis=1)
+
+axis1 = p1 * p1_vec; axis2 = p2 * p2_vec; axis3 = p3 * p3_vec
+comb = axis1 + axis2 +axis3
+
+
+princEig = np.array([p1,p2,p3]).reshape(3,1)
+shearEig = np.array([t1,t2,t3]).reshape(3,1)
+print('princInv',princ.reshape(1,3))
+print('princEig',princEig.reshape(1,3))
+print('shearEig',shearEig.reshape(1,3))
+print('p_vec:')
+print(p_vec)
+print('t_vec:')
+print(t_vec)
+nine = np.array([[p1,0,0],[0,p2,0],[0,0,p3]])
+rot = nine @ p_vec
+rot = nineToSix(rot)
+
+print('rot')
+print(rot.reshape(6,))
+
+nineShear = np.array([[0,t1,t3],[t1,0,t2],[t3,t2,0]])
+rotShear = nineShear * t_vec
+print(rotShear)
+rotShear = nineToSix(rotShear)
+print('rotShear')
+print(rotShear.reshape(6,))
+
+print('princEig*p_vec')
+print(princEig*p_vec)
+print('')
+print('dev(princ)',dev(princ).reshape(1,3))
+print('dev(six)',dev(six).reshape(1,6))
+print(normS(dev(princ)))
+print(normS(dev(six)))
+
+#BREAK
+
+R=0.1
+a = np.array([-50, 10, 0, -40, 0, 0]).reshape(6,1)
+aNine = np.array([[-50, -40, 0],[-40, 10, 0],[0,0,0]]).reshape(3,3)
+
+deva = dev(a)
+p1_vec, p2_vec, p3_vec = (princVec(a,0))#*180/np.pi
+p_vec = np.append(p1_vec.reshape(3,1), p2_vec.reshape(3,1), 1)
+p_vec = np.append(p_vec.reshape(3,2), p3_vec.reshape(3,1), 1).reshape(3,3)
+inv_p_vec = np.linalg.inv(p_vec)
+t1_vec, t2_vec, t3_vec = (princVec(a,1))#*180/np.pi
+t_vec = np.append(t1_vec.reshape(3,1), t2_vec.reshape(3,1), 1)
+t_vec = np.append(t_vec.reshape(3,2), t3_vec.reshape(3,1), 1).reshape(3,3)
+inv_t_vec = np.linalg.inv(t_vec)
+#Eigen vectors are always unit vectors AKA don't scale, are key to the transformation
+print('Principal normal vectors:')
+print('p_vec',p_vec)
+print('t_vec',t_vec)
+print()
+print('Principal normal values:') #Sum of principal normal eigenvalues minus mean stress equals zero
+#Normal Eigenvector values multiplied produce eigenvalue? No, must be another term included somewhere...
+p1, p2, p3 = princVal(a,0)
+t1, t2, t3 = princVal(a,1)
+princ = np.array([p1,p2,p3]).reshape(3,1)
+shear = np.array([t1,t2,t3]).reshape(3,1)
+key = np.linalg.solve(aNine, princ)
+print('key',key)
+
+
+ninePrinc = np.array([[p1, 0, 0],[0, p2, 0],[0, 0, p3]])
+print(princ)
+print()
+rotNormal =  ninePrinc @ inv_p_vec 
+ninePrinc = np.array([[0, t1, t3],[t1, 0, t2],[t3, t2, 0]])
+#print(ninePrinc)
+rotShear = ninePrinc @ inv_t_vec
+print('rotNormal',rotNormal)
+print('rotShear',rotShear)
+ninePrinc = np.array([[p1, t1, t3],[t1, p2, t2],[t3, t2, p3]])
+full_vec = p_vec + t_vec
+print('full_vec', full_vec)
+rot = ninePrinc @ full_vec
+print('rot', rot)
+
+print('')
+print('Principal normal deviatoric vectors:') #Eigenvectors not always identical between non-deviatoric and deviatoric
+p1_vec, p2_vec, p3_vec = np.arccos(princVec(deva,0))*180/np.pi
+print(p1_vec)
+print(p2_vec)
+print(p3_vec)
+print()
+
+print('Principal normal deviatoric values:') #Sum of principal normal Deviatoric eigenvalues always equal zero
+#Normal Dev Eigenvector values multiplied don't always produce eigenvalue
+p1, p2, p3 = princVal(deva,0)
+print(p1)
+print(p2)
+print(p3)
+print()
+(-0.361165*0.8888*0.282077)
+
+#BREAK
+
+def visBorjas3D(R_B, R_F, Stress0):
+    #========================================================================
+    # Visualizing the Borjas constitutive model in 3D
+    #========================================================================
+    #Base code for generic cylinder plotting:
+    #Created on Sun Oct  2 18:33:10 2016
+    #Modified from https://stackoverflow.com/questions/38076682/how-to-add-
+    #colors-to-each-individual-face-of-a-cylinder-using-matplotlib
+    #To add "end caps" and to undo fancy coloring.
+    #Author: astrokeat
+    #
+    #Edited to produce multiple Von Mises cylinders, axis, and interactivity
+    #Jul 15 2019
+    #Author: Justin Bonus
+    #========================================================================
+    import numpy as np
+    from collections import namedtuple
+    from scipy.linalg import norm
+
+
+    # Inputs
+    Su = 0.061
+    #R_B = Su*(8/3)**0.5 #Radius of bounding surface, (8/3)^{1/2}Su
+    p0 = np.array([-R_B, -R_B, -R_B]) #Point at one end, [\sigma_1, \sigma_2, \sigma_3]
+    p1 = np.array([R_B, R_B, R_B]) #Point at other end, [\sigma_1, \sigma_2, \sigma_3]
+
+    #Stress0 = np.array([0,0,0,.1,.07,.03]) #Last unloading point AKA \alpha
+    proj_Stress0 = hydroProjector(Stress0,2) #Projected onto plane normal to the hydrostatic axis, centered on origin
+
+    #R_F = (2/5)*R_B #Radius of yield surface AKA \zeta', MPa
+    p0_F = np.array([p0[0] + proj_Stress0[2], p0[1] + proj_Stress0[1], p0[2] + proj_Stress0[0]])
+    p1_F = np.array([p1[0] + proj_Stress0[2], p1[1] + proj_Stress0[1], p1[2] + proj_Stress0[0]])
+
+    #Vector in direction of axis
+    v = p1 - p0
+    v_F = p1_F - p0_F
+
+    #Unit vector in direction of axis
+    mag = norm(v)
+    v = v / mag
+    mag_F = norm(v_F)
+    v_F = v_F / mag_F
+
+    #Make some of the vectors not in the same direction as v
+    not_v = np.array([1, 0, 0])
+    if (v == not_v).all():
+        not_v = np.array([0, 1, 0])
+    not_v_F = np.array([1, 0, 0])
+    if (v_F == not_v_F).all():
+        not_v_F = np.array([0, 1, 0])             
+
+    #Make vector perpendicular to v, normalize n1
+    n1 = np.cross(v, not_v)
+    n1 /= norm(n1)
+    n1_F = np.cross(v_F, not_v_F)
+    n1_F /= norm(n1_F)
+
+    #Make unit vector perpendicular to v and n1
+    n2 = np.cross(v, n1)
+    n2_F = np.cross(v_F, n1_F)
+
+    #Surface ranges over t from 0 to length of axis and 0 to 2*pi
+    t = np.linspace(0, mag, 2)
+    theta = np.linspace(0, 2 * np.pi, 100)
+    rsample = np.linspace(0, R_B, 2)
+    t_F = np.linspace(0, mag_F, 2)
+    theta_F = np.linspace(0, 2 * np.pi, 100)
+    rsample_F = np.linspace(0, R_F, 2)
+
+    #Use meshgrid to make 2d arrays
+    t, theta2 = np.meshgrid(t, theta)
+    rsample,theta = np.meshgrid(rsample, theta)
+    t_F, theta2_F = np.meshgrid(t_F, theta_F)
+    rsample_F,theta_F = np.meshgrid(rsample_F, theta_F)
+
+    #Generate coordinates for surface
+    # "Tube"
+    X, Y, Z = [p0[i] + v[i] * t + R_B * np.sin(theta2) * n1[i] + R_B * np.cos(theta2) * n2[i] for i in [0, 1, 2]]
+    X_F, Y_F, Z_F = [p0_F[i] + v_F[i] * t_F + R_F * np.sin(theta2_F) * n1_F[i] + R_F * np.cos(theta2_F) * n2_F[i] for i in [0, 1, 2]]
+    X_hydro, Y_hydro, Z_hydro = [p0[i] + v[i]*t for i in [0, 1, 2]]
+    X_F0, Y_F0, Z_F0 = [p0_F[i] + v[i]*t for i in [0, 1, 2]]
+    # "Bottom"
+    #X2, Y2, Z2 = [p0[i] + rsample[i] * np.sin(theta) * n1[i] + rsample[i] * np.cos(theta) * n2[i] for i in [0, 1, 2]]
+    # "Top"
+    #X3, Y3, Z3 = [p0[i] + v[i]*mag + rsample[i] * np.sin(theta) * n1[i] + rsample[i] * np.cos(theta) * n2[i] for i in [0, 1, 2]]
+
+    #Factor fixes projection issue when viewing in 3D
+    Mc = np.sqrt(3/2)*R_B
+    refLine1x = np.array([0, Mc]); refLine1y = np.array([0, 0]); refLine1z = np.array([0, 0]).reshape(1,2);
+    refLine2x = np.array([0, 0]); refLine2y = np.array([0, Mc]); refLine2z = np.array([0, 0]).reshape(1,2);
+    refLine3x = np.array([0, 0]); refLine3y = np.array([0, 0]); refLine3z = np.array([0, Mc]).reshape(1,2);
+    
+    out = namedtuple('out',['refLine1x','refLine1y','refLine1z',
+                            'refLine2x','refLine2y','refLine2z',
+                            'refLine3x','refLine3y','refLine3z',
+                            'X_hydro','Y_hydro','Z_hydro',
+                            'X','Y','Z',
+                            'X_F','Y_F','Z_F',
+                            'X_F0','Y_F0','Z_F0'])
+    result = out(refLine1x,refLine1y,refLine1z,
+                 refLine2x,refLine2y,refLine2z,
+                 refLine3x,refLine3y,refLine3z,
+                 X_hydro,Y_hydro,Z_hydro,
+                 X,Y,Z,
+                 X_F,Y_F,Z_F,
+                 X_F0,Y_F0,Z_F0)
+    
+    return result
+
+#BREAK
+
+#===============================
+# PLOTTING INTERACTIVE 3D MODEL
+#===============================
+
+%matplotlib notebook 
+import matplotlib
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.widgets import Slider, Button, RadioButtons
+
+# Basic Setup
+font = {'size': 14}
+matplotlib.rc('font', **font)
+fig_bound = plt.figure()
+fig_bound.set_figheight(6)
+fig_bound.set_figwidth(6)
+ax = fig_bound.gca(projection='3d', proj_type = 'persp')
+#----------------------------
+
+# Initial Stress Settings
+Su = 0.061
+R_B = Su*(8/3)**0.5 #Radius of bounding surface, (8/3)^{1/2}Su
+R_F = (2/5)*R_B #Radius of yield surface AKA \zeta', MPa
+Stress0 = np.array([.05,.05,.05]) #Last unloading point AKA \alpha
+#----------------------------
+
+# Slider Settings
+B0 = R_B
+axB = plt.axes([0.3, 0.1, 0.4, 0.015])
+sB = Slider(axB, '$R$', 0, 10*B0, valinit=B0)
+
+F0 = R_F
+axF = plt.axes([0.3, 0.125, 0.4, 0.015])
+sF = Slider(axF, '$r$', 0, 10*F0, valinit=F0)
+
+S1 = Stress0[0] #WRONG FORM: Make principal 3x1
+S2 = Stress0[1]
+S3 = Stress0[2]
+
+axS1 = plt.axes([0.3, 0.15, 0.4, 0.015])
+axS2 = plt.axes([0.3, 0.175, 0.4, 0.015])
+axS3 = plt.axes([0.3, 0.2, 0.4, 0.015])
+sS1 = Slider(axS1, '$\sigma_1$', -10*Stress0[0], 10*Stress0[0], valinit=S1) #WRONG FORM: Make principal 3x1
+sS2 = Slider(axS2, '$\sigma_2$', -10*Stress0[1], 10*Stress0[1], valinit=S2)
+sS3 = Slider(axS3, '$\sigma_3$', -10*Stress0[2], 10*Stress0[2], valinit=S3)
+#----------------------------
+
+
+def draw(R_B,R_F,Stress0):
+    
+    # Retrieve cylinders and axis for stress state
+    refLine1x,refLine1y,refLine1z,refLine2x,refLine2y,refLine2z,refLine3x,refLine3y,refLine3z,X_hydro,Y_hydro,Z_hydro,X,Y,Z,X_F,Y_F,Z_F, X_F0,Y_F0,Z_F0 = visBorjas3D(R_B, R_F, Stress0)
+
+    # Plot reference lines
+    ax.plot_wireframe(refLine1x, refLine1y, refLine1z, color = 'black', label='$\sigma$ Axis') 
+    ax.plot_wireframe(refLine2x, refLine2y, refLine2z, color = 'black') 
+    ax.plot_wireframe(refLine3x, refLine3y, refLine3z, color = 'black')
+
+
+    ax.plot_wireframe(X_hydro, Y_hydro, Z_hydro, color='red', label = 'Hydrostatic Axis') #Plots hydrostatic axis
+    ax.plot_wireframe(X_F0, Y_F0, Z_F0, color='orange', label = 'Unloading Axis') #Plots axes that goes through last unloading point, F0
+    ax.plot_surface(X_F, Y_F, Z_F, color='blue') #Plots yield surface, F
+    ax.plot_wireframe(X, Y, Z, color='purple', label = 'Bounding Surface') #Plots bounding surface, B
+    #ax.plot_surface(X2, Y2, Z2, color='blue')
+    #ax.plot_surface(X3, Y3, Z3, color='blue')
+
+    #plt.xlabel('$\sigma_1$')
+    #plt.ylabel('$\sigma_2$')
+    #plt.zlabel('\sigma_3')
+    #plt.legend(bbox_to_anchor=(.75,1), loc="lower right")  # Legend outside plot
+    #plt.tight_layout()
+
+    #Make the panes transparent
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+
+    #Make the grid lines transparent
+    ax.set_axis_off()
+    ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+    ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+    ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+
+    ax.set_title('Model in $\sigma$ Space', fontdict=None, loc='center', pad=None)
+    plt.tight_layout()
+    plt.show()
+    #----------------------------
+
+# Initialize plot    
+draw(R_B,R_F,Stress0)
+
+def update(val): 
+    R_B = sB.val 
+    R_F = sF.val 
+    Stress0 = np.array([sS1.val, sS2.val, sS3.val])
+    ax.clear()
+    
+    draw(R_B, R_F, Stress0)
+    fig.canvas.draw_idle() 
+    return R_B, R_F, Stress0
+    
+def viewDev(self):
+    #Set view to deviatoric space
+    ax.clear()
+    R_B = sB.val 
+    R_F = sF.val 
+    Stress0 = np.array([sS1.val, sS2.val, sS3.val])
+    draw(R_B, R_F, Stress0)
+    ax.view_init(azim=45., elev=38)
+    plt.show()
+
+def viewX(self):
+    #Set view to deviatoric space
+    ax.clear()
+    R_B = sB.val 
+    R_F = sF.val 
+    Stress0 = np.array([sS1.val, sS2.val, sS3.val])
+    draw(R_B, R_F, Stress0)
+    ax.view_init(azim=0, elev=0)
+    plt.show()
+    
+    
+sB.on_changed(update)
+sF.on_changed(update)
+sS1.on_changed(update)
+sS2.on_changed(update)
+sS3.on_changed(update)
+
+#axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+axDev = plt.axes([0.1, 0.1, 0.1, 0.05])
+bDev = Button(axDev, '$\Pi$-plane')
+bDev.label.set_fontsize(10)
+bDev.on_clicked(viewDev)
+
+axX = plt.axes([0.1, 0.15, 0.1, 0.05])
+bX = Button(axX, 'X-View')
+bX.label.set_fontsize(10)
+bX.on_clicked(viewX)
+
+#bprev = Button(axprev, 'Previous')
+#bprev.on_clicked(callback.prev)
+
+plt.show()
+
+#BREAK
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
+
+freqs = np.arange(2, 20, 3)
+
+fig, ax = plt.subplots()
+plt.subplots_adjust(bottom=0.2)
+t = np.arange(0.0, 1.0, 0.001)
+s = np.sin(2*np.pi*freqs[0]*t)
+l, = plt.plot(t, s, lw=2)
+
+
+class Index(object):
+    ind = 0
+
+    def next(self, event):
+        self.ind += 1
+        i = self.ind % len(freqs)
+        ydata = np.sin(2*np.pi*freqs[i]*t)
+        l.set_ydata(ydata)
+        plt.draw()
+
+    def prev(self, event):
+        self.ind -= 1
+        i = self.ind % len(freqs)
+        ydata = np.sin(2*np.pi*freqs[i]*t)
+        l.set_ydata(ydata)
+        plt.draw()
+
+callback = Index()
+axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+bnext = Button(axnext, 'Next')
+bnext.on_clicked(callback.next)
+bprev = Button(axprev, 'Previous')
+bprev.on_clicked(callback.prev)
+
+plt.show()
+
+#BREAK
+
+import numpy as np
+%matplotlib notebook
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.widgets import Slider, Button, RadioButtons
+
+fig = plt.figure()
+plt.subplots_adjust(bottom=0.25)                
+ax = fig.add_subplot(121, projection='3d')        
+X= np.arange(-50,50,2)
+Y=np.arange(-50,50,2)
+X,Y = np.meshgrid(X,Y)
+
+Z = np.sqrt((X**2+Y**2)/(np.tan(np.pi/120)))            
+ax.plot_wireframe(X,Y,Z, rstride=3, cstride=3)         
+plt.axis('scaled')
+
+h0=0
+
+ax2 = fig.add_subplot(122, projection='3d') 
+Z2 = 0*X+0*Y+h0         
+
+l=ax2.plot_surface(X,Y,Z2,color='red',rstride=2, cstride=2)
+
+axhauteur = plt.axes([0.2, 0.1, 0.65, 0.03])
+shauteur = Slider(axhauteur, 'Hauteur', 0.5, 10.0, valinit=h0)
+
+def update(val): 
+    h = shauteur.val 
+    ax2.clear()
+    l=ax2.plot_surface(X,Y,0*X+0*Y+h,color='red',rstride=2, cstride=2)
+    ax2.set_zlim(0,10)
+    fig.canvas.draw_idle() 
+shauteur.on_changed(update)
+ax2.set_zlim(0,10)
+
+#BREAK
+
+def drawDeviatoricSurface_function(Stress0, CurStress, Su):
+    import numpy as np
+    from scipy.linalg import norm
+
+    def GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, SType):
+        # Mc = max(q/p) in compresion
+        # Me = max(q/p) in extension
+        # SType = type of surface 
+        # aRatio = MMe/MMc
+        # theta = Lode angle
+        
+        lode = np.linspace(0, 2*np.pi, 2*np.pi/0.02)
+        c = Me / Mc
+        aSurf = np.zeros((len(lode),3))
+        for i in range(0,len(lode)):
+            lodeMap = GetLodeMapping(lode[i])
+            if SType == 'MC':
+                q = MohrCoulomb(Mc, c, lodeMap) 
+            elif SType == 'MN':
+                q = MatsuokaNakai(Mc, c, lodeMap)
+            elif SType == 'WB':
+                q = Mc * g(lodeMap, c)
+            elif SType  == 'VM':
+                q = VonMises(Mc, c, lodeMap)
+            elif SType == 'B':
+                q = Borjas(Mc, c, lodeMap)
+            elif SType == 'BK':
+                q = BorjasKappa(Mc, c, VMSurf, kappa)
+            else:
+                q = 1.0
+                
+            if SType != 'BK':
+                # For MC, MN, WB, VM
+                aSurf[i,0] = 2/3 * q * np.cos(lode[i])
+                aSurf[i,1] = 2/3 * q * np.cos(lode[i] - 2*np.pi/3)
+                aSurf[i,2] = 2/3 * q * np.cos(lode[i] - 4*np.pi/3)
+
+                if SType == 'B':
+                    # For B
+                    aSurf[i,0] = np.sqrt(3/2)*(aSurf[i,0]) + (princ_dev_Stress0[0])
+                    aSurf[i,1] = np.sqrt(3/2)*(aSurf[i,1]) + (princ_dev_Stress0[1]) 
+                    aSurf[i,2] = np.sqrt(3/2)*(aSurf[i,2]) + (princ_dev_Stress0[2]) 
+                    
+            elif SType == 'BK':
+                # For BK
+                small = 1e-10
+                norm_center = (kappa * norm_dev_Stress0)/(kappa + 1)
+                if norm_dev_Stress0 < small:
+                    rat = 0
+                else:
+                    rat = norm_center / norm_dev_Stress0
+                center = rat * princ_dev_Stress0
+
+                aSurf[i,0] = 2/3 * q * np.cos(lode[i])
+                aSurf[i,1] = 2/3 * q * np.cos(lode[i] - 2*np.pi/3)
+                aSurf[i,2] = 2/3 * q * np.cos(lode[i] - 4*np.pi/3)
+                aSurf[i,0] = np.sqrt(3/2)*(aSurf[i,0]) + (center[0])
+                aSurf[i,1] = np.sqrt(3/2)*(aSurf[i,1]) + (center[1]) 
+                aSurf[i,2] = np.sqrt(3/2)*(aSurf[i,2]) + (center[2])
+                
+        return aSurf
+    #********************************************************************************************************
+    def GetLodeMapping(theta):
+        if theta >=0 and theta < np.pi/3:
+            theRegion = 1
+        elif theta >= np.pi/3 and theta < 2*np.pi/3:
+            theRegion = 2
+        elif theta >=2*np.pi/3 and theta < np.pi:
+            theRegion = 3
+        elif theta >= np.pi and theta < 4*np.pi/3:
+            theRegion = 4
+        elif theta >=4*np.pi/3 and theta < 5*np.pi/3:
+            theRegion = 5
+        elif theta >=5*np.pi/3 and theta <= 2*np.pi:
+            theRegion = 6
+        else:
+            theRegion = 7
+        
+        #Pseudo-switch    
+        switch_region = {
+            1: theta,
+            2: (2*np.pi/3 - theta),
+            3: (theta - 2*np.pi/3),
+            4: (4*np.pi/3 - theta),
+            5: (theta - 4*np.pi/3),
+            6: (6*np.pi/3 -theta)
+        }  
+        lodemap = switch_region.get(theRegion, 'Check GetLodeMapping function')
+        return lodemap    
+    #********************************************************************************************************
+    def g(theta, c):
+        term1  = 4.0 * (1.0 - c*c) * np.cos(theta - np.pi/3.0) * np.cos(theta - np.pi/3.0) + 5.0 * c * c - 4.0 * c
+        aNumer = 2.0 * (1.0 - c*c) * np.cos(theta - np.pi/3.0) + (2.0*c - 1.0) * np.sqrt(term1)
+        aDeno  = 4.0 * (1.0 - c*c) * np.cos(theta - np.pi/3.0) * np.cos(theta - np.pi/3.0) + (1.0 - 2.0*c) * (1.0 - 2.0*c)
+        result = aNumer / aDeno
+        return result
+    #********************************************************************************************************
+    def MohrCoulomb(MM, aRatio, theta):
+        # MM = q/p slope in compresion
+        # aRatio = MMe/MMc
+        # theta = Lode angle
+        c=0
+        p=1.0
+        # phi = asin(3.0*(1.0-aRatio)/(1+aRatio))*180.0/pi
+        #phi = ((np.arcsin(( np.divide(np.multiply( np.sqrt(3)*MM, np.sin(0+np.pi/3) ), (np.multiply( 3*1+MM, (np.cos(0+np.pi/3) )) )) )))).max()*180/np.pi
+        phi = ((np.arcsin((np.sqrt(3)*MM*np.sin(0+np.pi/3))/(3*1+MM*(np.cos(0+np.pi/3)))))).max()*180/np.pi
+        # term1  = 0.5*(sqrt(3)*(1+sin(phi*pi/180.0))*sin(theta)+(3-sin(phi*pi/180.0))*cos(theta))
+        # result = 3.0*(c * cos(phi*pi/180.0)+p*sin(phi*pi/180.0))/term1*sqrt(3.0/2.0)
+        result = 3*(p*np.sin(phi*np.pi/180)/(np.sqrt(3)*np.sin(theta+np.pi/3)-np.cos(theta+np.pi/3)*np.sin(phi*np.pi/180)))
+        return result
+    #********************************************************************************************************
+    def MatsuokaNakai(MM, aRatio, theta):
+        # MM = q/p slope in compresion
+        # aRatio = MMe/MMc
+        # theta = Lode angle
+        c=0
+        p=1.0
+        # phi = asin(3.0*(1.0-aRatio)/(1+aRatio))*180.0/pi;
+        phi = ((np.arcsin((np.sqrt(3)*MM*np.sin(0+np.pi/3))/(3*1+MM*(np.cos(0+np.pi/3)))))).max()*180/np.pi
+        eta=2*np.sin(phi*np.pi/180)/np.sqrt(4 - np.cos(phi*np.pi/180)**2)
+        xi=np.sin(phi*np.pi/180)*(np.cos(phi*np.pi/180)**2 + 8)/np.sqrt((4 - np.cos(phi*np.pi/180)**2)**3)
+        g=2*np.sqrt(3)*np.cos(np.arccos(xi*(-np.cos(3*theta)))/3)
+        result = 3*np.sqrt(3)*eta*p/g
+        return result
+    #********************************************************************************************************
+    def M_MatsuokaNakai(MM, aRatio, lode):
+        # MM = q/p slope in compresion
+        # aRatio = MMe/MMc
+        # theta = Lode angle
+        c=0
+        p=1.0
+        # phi = asin(3.0*(1.0-aRatio)/(1+aRatio))*180.0/pi;
+        phi = max((np.arcsin((np.sqrt(3)*MM*np.sin(0+np.pi/3))/(3*1+MM*(np.cos(0+np.pi/3))))))*180/np.pi
+        eta=2*np.sin(phi*np.pi/180)/np.sqrt(4-np.cos(phi*np.pi/180)**2)
+        xi=np.sin(phi*np.pi/180)*(np.cos(phi*np.pi/180)**2+8)/np.sqrt((4-np.cos(phi*np.pi/180)**2)**3)
+        for i in range(0,len(lode)):
+            lodeMap = GetLodeMapping(lode[i])
+            g=2*np.sqrt(3)*np.cos(np.arccos(xi*(-np.cos(3*lode[i])))/3)
+            result = 3*np.sqrt(3)*eta/g
+        return result
+    #********************************************************************************************************
+    def VonMises(MM, aRatio, theta):
+        #Creates circle of radius MM around the origin
+        R = MM
+        result = R
+        return result
+    #********************************************************************************************************
+    def Borjas(MM, aRatio, theta):
+        #Determines the yield function radius and constructs a circle around point of last unloading
+        result = eucli
+        return result
+    #********************************************************************************************************
+    # Output kappa contour
+    def BorjasKappa(MM, aRatio, theta, frac):
+        # kappa defined outside of function
+        small = 1e-10
+        RR = MM
+        
+        norm_dev_Stress0 = float(normS(princ_dev_Stress0))
+        norm_center = (kappa * norm_dev_Stress0)/(kappa + 1)
+        if norm_dev_Stress0 < small:
+            rat = 0
+        else:
+            rat = norm_center / norm_dev_Stress0
+        center = rat * princ_dev_Stress0
+        north = ((RR - kappa*norm_dev_Stress0)/(kappa + 1))
+        south = -((RR + kappa*norm_dev_Stress0)/(kappa + 1))
+        rad = np.abs((north - south)/2)
+        return rad
+    #********************************************************************************************************
+    #Mc being used as a proxy for R
+    Mc = ((8/3)**0.5)*Su
+    Me = Mc * 0.65
+    aRatio=Me/Mc
+    theta0=0
+
+    phi = np.arcsin(3.0*(1.0-aRatio)/(1+aRatio))*180.0/np.pi
+    phi2 = ((np.arcsin((np.sqrt(3)*Mc*np.sin(theta0+np.pi/3))/(3*1+Mc*(np.cos(theta0+np.pi/3))))))*180/np.pi
+
+    #======================================
+    # Project vectors (6x1, 3x1) onto flattened deviatoric plane
+    # U_{proj-plane} = U - ((dot(U,n))/||n||^2)n
+    # U is arbitrary vector, n is vector normal to plane to project on
+    # dev() will automatically perform this projection
+    #======================================
+    
+    if CurStress.shape == (6,1) or CurStress.shape == (6,) or CurStress.shape == (1,6):
+        Stress0 = Stress0.reshape(6,1)
+        CurStress = CurStress.reshape(6,1)
+        dev_Stress0 = dev(Stress0)
+        dev_CurStress = dev(CurStress)
+        norm_dev_Stress0 = normS(dev_Stress0)
+        norm_dev_CurStress = normS(dev_CurStress)
+
+        #Solve eigenvalues for normal principal stress
+        p1,p2,p3 = princVal(dev_Stress0,0)
+        princ_dev_Stress0 = np.array([p1,p2,p3])
+        p1,p2,p3 = princVal(dev_CurStress,0)
+        princ_dev_CurStress = np.array([p1,p2,p3])
+        
+    elif CurStress.shape == (3,1) or CurStress.shape == (3,) or CurStress.shape == (1,3):
+        Stress0 = Stress0.reshape(3,1)
+        CurStress = CurStress.reshape(3,1)
+        dev_Stress0 = dev(Stress0).reshape(3,1)
+        dev_CurStress = dev(CurStress).reshape(3,1)
+        norm_dev_Stress0 = normS(dev_Stress0)
+        norm_dev_CurStress = normS(dev_CurStress)
+    
+        princ_dev_Stress0 = dev_Stress0
+        princ_dev_CurStress = dev_CurStress
+
+        
+    #Euclidian distance
+    eucli = ((princ_dev_CurStress[2]-princ_dev_Stress0[2])**2 +
+             (princ_dev_CurStress[1]-princ_dev_Stress0[1])**2 +
+             (princ_dev_CurStress[0]-princ_dev_Stress0[0])**2)**0.5
+    
+    #Get projected constitutive shapes (MC, MN , WB, VM, B)
+    #MCSurf = GetSurfaceInfo(Mc, Me, proj_dev_Stress0, proj_dev_CurStress, 'MC')
+    #MNSurf = GetSurfaceInfo(Mc, Me, proj_dev_Stress0, proj_dev_CurStress, 'MN')
+    #K1=MNSurf[:,0]*3/2
+    #WBSurf = GetSurfaceInfo(Mc, Me, proj_dev_Stress0, proj_dev_CurStress, 'WB')
+    #MCSurf5 = GetSurfaceInfo(Mc, Me, proj_Stress0, proj_CurStress, 'B')
+    
+    # Create bounding and yield surface
+    BSurf = GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, 'B')
+    proj_R = np.sqrt(3/2)*Mc
+    VMSurf = GetSurfaceInfo(proj_R, Me, princ_dev_Stress0, princ_dev_CurStress, 'VM')
+
+    
+    # Create contours of equal \kappa value
+    kappa = 5
+    BKSurfOne = GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, 'BK')
+    kappa = 2
+    BKSurfTwo = GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, 'BK')
+    kappa = 1
+    BKSurfThree = GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, 'BK')
+    kappa = 0.2
+    BKSurfFour = GetSurfaceInfo(Mc, Me, princ_dev_Stress0, princ_dev_CurStress, 'BK')
+    
+    # Lines for the hydrostatic axis and reference axis
+    hydroLinex = np.array([0,proj_R]); hydroLiney = np.array([0,proj_R]); hydroLinez = np.array([0,proj_R]).reshape(1,2) 
+    refLine1x = np.array([0, proj_R]); refLine1y = np.array([0, 0]); refLine1z = np.array([0, 0]).reshape(1,2);
+    refLine2x = np.array([0, 0]); refLine2y = np.array([0, proj_R]); refLine2z = np.array([0, 0]).reshape(1,2);
+    refLine3x = np.array([0, 0]); refLine3y = np.array([0, 0]); refLine3z = np.array([0, proj_R]).reshape(1,2);
+
+    # Projected lines for last unloading point (alpha) and current stress point (active), and connector (zeta)
+    dev_alphaLinex = np.array([0,float(princ_dev_Stress0[2])]); 
+    dev_alphaLiney = np.array([0,float(princ_dev_Stress0[1])]); 
+    dev_alphaLinez = np.array([0,float(princ_dev_Stress0[0])]).reshape(1,2)
+    dev_stressLinex = np.array([0,float(princ_dev_CurStress[2])]); 
+    dev_stressLiney = np.array([0,float(princ_dev_CurStress[1])]); 
+    dev_stressLinez = np.array([0,float(princ_dev_CurStress[0])]).reshape(1,2)    
+    ## AKA \zeta' = \sigma' - alpha       
+    dev_zetaLinex = np.array([float(princ_dev_Stress0[2]),float(princ_dev_CurStress[2])]); 
+    dev_zetaLiney = np.array([float(princ_dev_Stress0[1]),float(princ_dev_CurStress[1])]); 
+    dev_zetaLinez = np.array([float(princ_dev_Stress0[0]),float(princ_dev_CurStress[0])]).reshape(1,2)    
+    
+    # Draw from stress point to projection plane
+    dev_alphaAxisx = np.array([princ_dev_Stress0[2],princ_dev_Stress0[2]+Mc/4]); 
+    dev_alphaAxisy = np.array([princ_dev_Stress0[1],princ_dev_Stress0[1]+Mc/4]); 
+    dev_alphaAxisz = np.array([princ_dev_Stress0[0],princ_dev_Stress0[0]+Mc/4]).reshape(1,2) 
+    dev_stressAxisx = np.array([princ_dev_CurStress[2],princ_dev_CurStress[2]+Mc/4]); 
+    dev_stressAxisy = np.array([princ_dev_CurStress[1],princ_dev_CurStress[1]+Mc/4]); 
+    dev_stressAxisz = np.array([princ_dev_CurStress[0],princ_dev_CurStress[0]+Mc/4]).reshape(1,2) 
+
+    
+    # Store all wireframes in a namedtuple, similar to class structure
+    # Makes it convenient to access when calling this function
+    result = namedtuple('result', ['VMSurf','BSurf', 'BKSurfOne', 'BKSurfTwo', 'BKSurfThree', 'BKSurfFour',
+                                   'hydroLinex', 'hydroLiney', 'hydroLinez', 
+                                   'refLine1x', 'refLine1y', 'refLine1z',
+                                   'refLine2x', 'refLine2y', 'refLine2z',
+                                   'refLine3x', 'refLine3y', 'refLine3z',
+                                   'dev_alphaLinex', 'dev_alphaLiney', 'dev_alphaLinez',
+                                   'dev_stressAxisx', 'dev_stressAxisy', 'dev_stressAxisz',
+                                   'dev_alphaAxisx', 'dev_alphaAxisy', 'dev_alphaAxisz',
+                                   'dev_stressLinex', 'dev_stressLiney', 'dev_stressLinez',
+                                   'dev_zetaLinex', 'dev_zetaLiney', 'dev_zetaLinez'])
+    
+    result = result(VMSurf,BSurf,BKSurfOne,BKSurfTwo, BKSurfThree, BKSurfFour,
+                   hydroLinex, hydroLiney, hydroLinez, 
+                   refLine1x, refLine1y, refLine1z,
+                   refLine2x, refLine2y, refLine2z,
+                   refLine3x, refLine3y, refLine3z,
+                   dev_alphaLinex, dev_alphaLiney, dev_alphaLinez,
+                   dev_stressAxisx, dev_stressAxisy, dev_stressAxisz,
+                   dev_alphaAxisx, dev_alphaAxisy, dev_alphaAxisz,
+                   dev_stressLinex, dev_stressLiney, dev_stressLinez,
+                   dev_zetaLinex, dev_zetaLiney, dev_zetaLinez)
+
+    return result
+
+#BREAK
+
+#======================================================
+# DRAWING PSEUDO-2D REPRESENTATION OF DEVIATORIC SPACE
+# Not animated, purely for a single stress state
+#======================================================
+import numpy as np
+from collections import namedtuple
+%matplotlib inline
+import matplotlib
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+Su = 0.061 #MPa
+R = Su*(8/3)**0.5
+
+#Stress0 = np.array([0,R/2,0.0,0,0,0]).reshape(6,1)
+#CurStress = np.array([0,np.sqrt(1/2)*R,-np.sqrt(1/2)*R,0,0,0]).reshape(6,1)
+Stress0 = np.array([2*R/3.0,0,R/2]).reshape(3,1)
+CurStress = np.array([-np.sqrt(1/4)*R,np.sqrt(1/5)*R,np.sqrt(1/3)*R]).reshape(3,1)
+
+drawDev = drawDeviatoricSurface_function(Stress0, CurStress, Su)
+fig_dev = plt.figure('Deviatoric Surface')
+ax = fig_dev.gca(projection='3d', proj_type = 'ortho')
+fig_dev.set_figheight(6)
+fig_dev.set_figwidth(6)
+
+#Plot reference lines
+ax.plot_wireframe(drawDev.refLine1x, drawDev.refLine1y, drawDev.refLine1z, color = 'black', label='$\sigma$ Axis') 
+ax.plot_wireframe(drawDev.refLine2x, drawDev.refLine2y, drawDev.refLine2z, color = 'black') 
+ax.plot_wireframe(drawDev.refLine3x, drawDev.refLine3y, drawDev.refLine3z, color = 'black')
+
+#Plot projected lines
+ax.plot_wireframe(drawDev.dev_alphaLinex, drawDev.dev_alphaLiney, drawDev.dev_alphaLinez, color = 'orange')
+ax.plot_wireframe(drawDev.dev_stressLinex, drawDev.dev_stressLiney, drawDev.dev_stressLinez, color = 'red', label = '$\sigma\'$')     
+ax.plot_wireframe(drawDev.dev_zetaLinex, drawDev.dev_zetaLiney, drawDev.dev_zetaLinez.reshape(1,2), color = 'green', label='$\zeta\'$')   
+
+#Plot axis
+#ax.plot_wireframe(drawDev.dev_alphaAxisx, drawDev.dev_alphaAxisy, drawDev.dev_alphaAxisz, color = 'orange')
+#ax.plot_wireframe(drawDev.dev_stressAxisx, drawDev.dev_stressAxisy, drawDev.dev_stressAxisz, color = 'red')
+#ax.plot_wireframe(drawDev.hydroLinex, drawDev.hydroLiney, drawDev.hydroLinez, color = 'gray')
+
+#Plot constitutive shapes
+ax.plot_wireframe(drawDev.VMSurf[:,2], drawDev.VMSurf[:,1], drawDev.VMSurf[:,0].reshape(1,len(drawDev.VMSurf[:,0])), color = 'black', label='Bounding Surface')
+#ax.plot_wireframe(drawDev.BSurf[:,2], drawDev.BSurf[:,1], drawDev.BSurf[:,0].reshape(1,len(drawDev.BSurf[:,0])), color = 'blue', label='Yield Surface')
+ax.plot_wireframe(drawDev.BKSurfOne[:,2], drawDev.BKSurfOne[:,1], drawDev.BKSurfOne[:,0].reshape(1,len(drawDev.BKSurfOne[:,0])), color = 'yellow', label='kappa')
+ax.plot_wireframe(drawDev.BKSurfTwo[:,2], drawDev.BKSurfTwo[:,1], drawDev.BKSurfTwo[:,0].reshape(1,len(drawDev.BKSurfTwo[:,0])), color = 'orange', label='kappa')
+ax.plot_wireframe(drawDev.BKSurfThree[:,2], drawDev.BKSurfThree[:,1], drawDev.BKSurfThree[:,0].reshape(1,len(drawDev.BKSurfThree[:,0])), color = 'red', label='kappa')
+ax.plot_wireframe(drawDev.BKSurfFour[:,2], drawDev.BKSurfFour[:,1], drawDev.BKSurfFour[:,0].reshape(1,len(drawDev.BKSurfFour[:,0])), color = 'purple', label='kappa')
+
+#Set view to deviatoric space
+#view(-45, -35.25)
+ax.azim = 45
+ax.elev = 38.5
+#view([-0.5773 -0.5773 -0.5773])
+plt.legend(bbox_to_anchor=(.75,1), loc="lower right")  # Legend outside plot
+#Make the panes transparent
+ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+
+#Make the grid lines transparent
+ax.set_axis_off()
+ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+
+#plt.tight_layout()
+plt.show()
+
+
+#BREAK
+
+def animateDeviatoricSurface(time, Stress0, stress, Su):
+    # ==============================================
+    # Requires access to modified drawDeviatoricSurface_function(). Original Author: Pedro Arduino
+    # Author: Justin K. Bonus, University of Washington, July 2019
+    # ==============================================
+    # This function animates stresses in a pseudo 2D deviatoric space for the Borjas & Amies
+    # 1994 multiaxial cyclic bounding surface model. 
+    # It has been designed to easily connect to standard driver 6x1 stress outputs.
+    # It will draw the boundary and changing yield surface for each stress state.
+    # Also draws \alpha, \sigma', and \zeta' lines.
+    # NOTE: \sqrt(3/2) factor is applied sporadically for visual consistency, ensure this is what you want 
+    # =================== Inputs ===================
+    # time: List of time instances evaluated during stress loading, determines number of frames
+    # Stress0: Array containing 6x1 stresses representing last unloading point
+    # stress: Array containing 6x1 stresses representing the current stress
+    # Su: Undrained shear strength, defines boundary radius (R=Su(8/3)^0.5)
+    # =================== Output ===================
+    # anidev: Animation for the stress loading in deviatoric space
+    # mp4 anidev: Saves .mp4 of animation to directory
+    # gif anidev: Saves .gif of animation to directory. Compression method currently disabled
+    # HTML anidev: Animation embedded in HTML video format, appears in jupyter notebooks
+    # ==============================================
+    
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import mpl_toolkits.mplot3d.axes3d as p3
+    import matplotlib.animation as animation
+    from matplotlib import rc
+    from IPython.display import HTML #Allows for HTML output of animation   
+
+    fps = 10
+    R = Su*(8/3)**0.5
+
+    # Returns instance of objects from drawDeviatoricSurface_function in a namedtuple for ease of use
+    def Gen_Frame(Stress0, stress, Su):
+        # Create namedtuple containing all lines/circles for the frame
+        drawDev = drawDeviatoricSurface_function(Stress0, stress, Su)
+        return drawDev
+
+    # Initialize wire_frames for iteration, global access for convenience
+    global VMframe, Bframe
+    global BKOneframe, BKTwoframe, BKThreeframe, BKFourframe
+    global alphaframe, stressframe, zetaframe
+    VMframe, Bframe = None, None
+    BKOneframe, BKTwoframe, BKThreeframe, BKFourframe = None,None,None,None
+    alphaframe, stressframe, zetaframe = None, None, None
+    
+    # Test Gen_Frame for first stress state
+    hold = Gen_Frame(Stress0[:,0], stress[:,0], Su)
+
+    # Update function called each frame, returns new drawings based on output of Gen_Frame
+    def update(frame):
+        global VMframe, Bframe
+        global BKOneframe, BKTwoframe, BKThreeframe, BKFourframe
+        global alphaframe, stressframe, zetaframe
+        # If a line collection is already remove it before drawing. Creates a 'clean-slate' each frame
+        if VMframe:
+            ax.collections.remove(VMframe)
+        if Bframe:
+            ax.collections.remove(Bframe)
+        if BKOneframe:
+            ax.collections.remove(BKOneframe)
+        if BKTwoframe:
+            ax.collections.remove(BKTwoframe)
+        if BKThreeframe:
+            ax.collections.remove(BKThreeframe)
+        if BKFourframe:
+            ax.collections.remove(BKFourframe)
+        if alphaframe:
+            ax.collections.remove(alphaframe)
+        if stressframe:
+            ax.collections.remove(stressframe)
+        if zetaframe:
+            ax.collections.remove(zetaframe)
+        
+        # Get the namedtuple containing all wireframes for the stress state of this frame
+        hold = Gen_Frame(Stress0[:,frame], stress[:,frame], Su)
+        
+        # Plot the new wireframes.
+        alphaframe = ax.plot_wireframe(hold.dev_alphaLinex, hold.dev_alphaLiney, hold.dev_alphaLinez, 
+                                       rstride=1, cstride=1, color='blue', linewidth=2)
+        stressframe = ax.plot_wireframe(hold.dev_stressLinex, hold.dev_stressLiney, hold.dev_stressLinez, 
+                                        rstride=1, cstride=1, color='grey', label = '$\sigma\'$', linewidth=2)
+        zetaframe = ax.plot_wireframe(hold.dev_zetaLinex, hold.dev_zetaLiney, hold.dev_zetaLinez, 
+                                      rstride=1, cstride=1, color='green', label = '$\zeta\'$', linewidth=2)
+        VMframe = ax.plot_wireframe(hold.VMSurf[:,2], hold.VMSurf[:,1], hold.VMSurf[:,0].reshape(1,len(hold.VMSurf[:,0])), 
+                                    rstride=1, cstride=1, color='black', label='Bounding Surface', linewidth=2)
+        #Bframe = ax.plot_wireframe(hold.BSurf[:,2], hold.BSurf[:,1], hold.BSurf[:,0].reshape(1,len(hold.BSurf[:,0])), 
+        #                           rstride=1, cstride=1, color='blue', label='Yield Surface', linewidth=2)
+        BKOneframe = ax.plot_wireframe(hold.BKSurfOne[:,2], hold.BKSurfOne[:,1], hold.BKSurfOne[:,0].reshape(1,len(hold.BKSurfOne[:,0])), 
+                                   rstride=1, cstride=1, color='yellow', label='kappa', linewidth=2)
+        BKTwoframe = ax.plot_wireframe(hold.BKSurfTwo[:,2], hold.BKSurfTwo[:,1], hold.BKSurfTwo[:,0].reshape(1,len(hold.BKSurfTwo[:,0])), 
+                                   rstride=1, cstride=1, color='orange', label='kappa', linewidth=2)
+        BKThreeframe = ax.plot_wireframe(hold.BKSurfThree[:,2], hold.BKSurfThree[:,1], hold.BKSurfThree[:,0].reshape(1,len(hold.BKSurfThree[:,0])), 
+                                   rstride=1, cstride=1, color='red', label='kappa', linewidth=2)
+        BKFourframe = ax.plot_wireframe(hold.BKSurfFour[:,2], hold.BKSurfFour[:,1], hold.BKSurfFour[:,0].reshape(1,len(hold.BKSurfFour[:,0])), 
+                                   rstride=1, cstride=1, color='purple', label='kappa', linewidth=2)
+
+    #Settings for plot
+    def init():
+        fig_anidev.set_figheight(6)
+        fig_anidev.set_figwidth(6)
+        ax.set_xlim(-R, R)
+        ax.set_ylim(-R, R)
+        ax.set_zlim(-R, R)
+        #Set view to deviatoric space
+        #view(-45, -35.25)
+        ax.azim = 45
+        ax.elev = 35.25
+        #view([-0.5773 -0.5773 -0.5773])
+        #plt.legend(bbox_to_anchor=(.75,1), loc="lower right")  # Legend outside plot
+        #Make the panes transparent
+        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+
+        #Make the grid lines transparent
+        ax.set_axis_off()
+        ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+        ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+        ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+        
+        #Draw constant objects
+        h = Gen_Frame(Stress0[:,0],stress[:,0],Su)
+        ax.plot_wireframe(h.refLine1x,h.refLine1y,h.refLine1z,color='black')
+        ax.plot_wireframe(h.refLine2x,h.refLine2y,h.refLine2z,color='black')
+        ax.plot_wireframe(h.refLine3x,h.refLine3y,h.refLine3z,color='black')
+        ax.legend()
+        ax.set_title('Stress Loading Viewed from Deviatoric Space')
+
+
+    #Attaching 3D axis to the figure
+    fig_anidev = plt.figure(figsize=(6,6))
+    fig_anidev.set_size_inches(w=6,h=6)
+    ax = p3.Axes3D(fig_anidev)
+    
+    #Using the fig_dev plotting space FuncAnimation() calls the draw() function. len(stress) is passed into draw()
+    #first and in this case controls number of frames. fargs passes in additional draw() parameters. interval
+    #determines millisecond delay between frames. blit 
+    anidev = animation.FuncAnimation(fig_anidev, update, len(time)-1, init_func=init, interval=1000/fps, blit=False, repeat=True)
+    plt.show()
+    
+    #Save .gif and .mp4 of animation in directory, increases compile time. Toggle off for speed
+    fn = 'deviatoricSurface_funcanimation'
+    ##anidev.save(fn+'.mp4',writer='ffmpeg',fps=fps)
+    ##anidev.save(fn+'.gif',writer='imagemagick',fps=fps)
+
+    #import subprocess
+    #cmd = 'magick convert %s.gif -fuzz 5%% -layers Optimize %s_r.gif'%(fn,fn)
+    #subprocess.check_output(cmd, shell=True)
+    
+    #Embed HTML video of animation in notebook
+    #HTML(anidev.to_html5_video())
+    #rc('animation', html='html5')
+    plt.rcParams['animation.html'] = 'html5'
+    return anidev
+
+#BREAK
+
+R = 0.1
+nPoints = 101
+nRevs = 10/3
+p = np.linspace(0,nRevs*2*np.pi,nPoints)
+pp = np.linspace(0,2*np.pi,nPoints)
+
+a = (R/5)
+k = R*np.sqrt(2)/2
+
+# Spiral
+x=a*np.e**(k*p)*np.sin(p)
+x = x
+y=a*np.e**(k*p)*np.cos(p)
+y = y-a; y = -y # Center and flip
+
+# Circle
+xx = R*np.sin(pp)
+yy = R*np.cos(pp)
+
+fig = plt.figure(figsize = (6,6))
+plt.plot(x,y)
+plt.plot(xx,yy)
+plt.title('Spiral Movement on $\Pi$-Plane')
+xt = np.linspace(x.min(),x.max(), 5)
+yt = np.linspace(y.min(),y.max(), 5)
+plt.xlim(-R,R)
+#plt.xticks(xt)
+plt.ylim(-R,R)
+plt.grid()
+#plt.yticks(yt)
+plt.show()
+
+#BREAK
+
+nCycles = 3
+omega   = 0.15
+time   = np.linspace(0, nCycles*2*np.pi/omega, nCycles*nPoints)
+Su = 0.061 #Undrained shear strength, MPa
+R = Su*(8/3)**0.5
+
+nPoints = 21
+nRevs = 10/3
+p = np.linspace(0,nRevs*2*np.pi,nCycles*nPoints)
+a = 3*R
+k = R*np.sqrt(2)/2
+
+# Spiral
+x=a*np.e**(k*p)*np.sin(p)
+y=a*np.e**(k*p)*np.cos(p)
+y = y-a; y = -y # Center and flip
+Stress0 = np.array([[np.sqrt(2/3)*R],[0],[0]])*y + np.array([[0],[(1/2)*R],[-(1/2)*R]])*x
+Stress0 = np.append(Stress0, np.flip(Stress0,1),1).reshape(3,2*nCycles*nPoints) # Reverse path at end, aesthetic
+
+#CurStress = np.array([[np.sqrt(3/2)*R],[0.000],[0.000]]) * np.sin( omega*time )     
+CurStress = np.array([[1/2*R],[0],[0]]) * np.cos( omega*time * 2*np.pi/3 ) + np.array([[-1/5*R],[1/3*R],[2/3*R]]) * np.sin( omega*time * 1*np.pi/3 )
+CurStress = np.append(CurStress, np.flip(CurStress,1)).reshape(3,2*nCycles*nPoints)
+
+time = np.append(time,time[::-1]) # Reverse path at end, aesthetic
+
+anidev = animateDeviatoricSurface(time, Stress0, CurStress, Su)
+anidev
+
+#BREAK
+
+def BSDriver(LoadCase):
+    # BoundingSurface J2 with kinematic hardening 
+    # Written by Pedro Arduino, Mar. 22 2019
+    # Copyright Arduino Computational Geomechanics Group
+    # Ported into Python/Jupyter Notebook by Justin Bonus, Jul. 2019
+    #
+    #
+    # LoadCase:
+    #    1 ... proportionally increasing strain
+    #    2 ... cyclic strain
+    #    3 ... proportionally increasing stress
+    #    4 ... cyclic stress
+    #
+    # ======  LOADING CASES ==================================================
+    
+    import numpy as np
+    from collections import namedtuple
+    
+    nPoints = 1000
+
+    ## Switch for LoadCases:
+    ## Pseudo-switch created by using python dictionary to hold LoadCase functions
+    def case_one():
+        case_one.time   = np.linspace(0,1,nPoints+1)
+        case_one.strain = np.array([ 0.05, -0.015, -0.015, 0.000, 0.000, 0.000 ]).reshape(6,1) * case_one.time
+        case_one.StressDriven = 0
+        return case_one
+    def case_two():
+        nCycles = 3
+        omega   = 0.15
+        case_two.time   = np.linspace(0,nCycles*2*np.pi/omega,nCycles*nPoints+1);
+        case_two.strain = np.array([ 0.00, -0.000, -0.000, 0.045, 0.000, 0.000 ]).reshape(6,1) * np.sin( omega*case_two.time )      
+        case_two.StressDriven = 0 
+        return case_two
+    def case_three():
+        case_three.time   = np.linspace(0,1,nPoints+1)       
+        case_three.stress = np.array([[0.100],
+                           [0.000],
+                           [0.000],
+                           [0.000],
+                           [0.000],
+                           [0.000]])*case_three.time + 0.0*np.array([1,1,1,0,0,0]).reshape(6,1)*np.ones( case_three.time.shape )            
+        case_three.StressDriven = 1    
+        return case_three
+    def case_four():
+        nCycles = 3
+        omega   = 0.15
+        case_four.time   = np.linspace(0, nCycles*2*np.pi/omega, nCycles*nPoints+1)
+        case_four.stress = np.array([[0.000],
+                           [0.000],
+                           [0.000], #.01, .03, -.01, .05, 0, -.02
+                           [0.050],
+                           [0.000],
+                           [0.000]])*np.sin( omega*case_four.time ) + 0.0*np.array([1,1,1,0,0,0]).reshape(6,1)*np.ones( case_four.time.shape )            
+        case_four.StressDriven = 1          
+        return case_four
+
+    case_switcher = {
+        1: case_one,
+        2: case_two,
+        3: case_three,
+        4: case_four
+    }    
+
+    case = case_switcher.get(LoadCase, lambda: "Invalid LoadCase")
+    case() #Runs the LoadCase function. Creates: case.time, case.strain | case.stress, case.StressDriven
+    time, StressDriven = case.time, case.StressDriven 
+    if StressDriven:
+        stress = case.stress
+        strain = np.zeros((6,1)) #initialize empty 6x1 strain numpy array for stress-driven scenario
+    else:
+        strain = case.strain
+        stress = np.zeros((6,1)) #initialize empty 6x1 stress numpy array for strain-driven scenario
+    
+    Stress0 = np.zeros((6,1)) #Initialize first 'unloading' point
+    StrainDriven = int(not StressDriven)
+
+    # ========================================================================
+    # ---- MATERIAL PARAMETERS
+    # Static Parameters
+
+    # Static Parameters
+    E = 20 #Elastic Modulus  MPa
+    v= 0.49 #Poissons ratio, less than 0.5 to allow compresibility
+    G = E/(2*(1+v)) #Shear modulus
+    K = E/(3*(1-2*v)) #Bulk modulus
+    Kmod = 0 #Isotropic Hardening
+    Su = 0.061 #Yield stress in 1-D tension test MPa
+    hh = G #kinematic hardening parameter
+    mm = 1.0 #kinematic hardening parameter
+    beta = 0.5 #midpoint integration
+    RR = np.sqrt(8/3)*Su
+
+    #namedtuple used to organzie related variables, similar to a structure
+    static = namedtuple('StaticParam',['E','v','G','K','Kmod','Su','hh','mm','beta','RR'])
+    StaticParam = static(E,v,G,K,Kmod,Su,hh,mm,beta,RR)
+
+
+    # ========================================================================
+    # ---- INITIAL CONDITIONS
+
+    # Initialize the state variables
+    if StrainDriven:
+        IniStress = -0.0*(np.array([1, 1, 1, 0, 0, 0]).reshape(6,1))
+        IniStrain = np.linalg.solve(GetCe(StaticParam), IniStress) #Check if GetCe compacts to nxn
+    elif StressDriven:
+        IniStress =  0.0*(np.array([1, 1, 1, 0, 0, 0]).reshape(6,1))
+        IniStrain =  0.0*(np.array([1, 1, 1, 0, 0, 0]).reshape(6,1))   
+
+    #Structure for IniState (initial state parameters, static) and CurState (changing state parameters)
+    state = namedtuple('state', ['eP','alphaISO','Stress0', 'Kappa', 'Psi'])
+ 
+    eP = 0.0*(np.array([1, 1, 1, 0, 0, 0]).reshape(6,1))
+    alphaISO = 0.0  
+    Stress0 = 0.0*(np.array([1, 1, 1, 0, 0, 0]).reshape(6,1))
+    Kappa = 0.0
+    Psi = 0.0
+    IniState = state(eP, alphaISO, Stress0, Kappa, Psi)
+
+    # For first iteration
+    CurStress = IniStress
+    CurStrain = IniStrain
+    CurState  = IniState
+
+    # Variables used for plotting
+    alphaISO_plot, j2_plot, j2e_plot, stress_var_plot, stress_var2_plot = [], [], [], [], [] #Initiliaze list format
+    alphaISO_plot.append(0) #Python list allows for easy data addition
+    strain[:,0] = CurStrain.T - IniStrain.T 
+    stress[:,0] = CurStress.T
+    j2_plot.append(0)
+    j2e_plot.append(0)
+    stress_var_plot.append(0)
+    Stress0[:,0] = CurStress.T
+    Iter = np.zeros(time.shape)
+
+
+    # ========================================================================
+    # ---- COMPUTATION CYCLES
+
+    if StrainDriven:
+        #StrainDriven
+        for i in range(1, (len(strain[0]) )):
+
+            NextStrain = strain[:,i] + IniStrain.T
+            dStrain = strain[:,i] - strain[:, i-1] #Driving variable
+            
+            #Current BSRadialMap is a function, will be transformed into a class eventually
+            NextStress, NextState, NextCep = BSRadialMap(dStrain, StaticParam, CurStress, CurState)
+
+            # Update Stress, Strain, and State
+            CurStress = NextStress
+            CurState = NextState
+            
+            # Variables created for plotting purposes
+            alphaISO_plot.append(CurState.alphaISO)
+            stress = np.append(stress, CurStress, 1)
+            j2_plot.append(GetJ2(CurStress))
+            stress_var_plot.append(np.sqrt(2*j2_plot[i])*np.sqrt(3/2)*np.sign(stress[0,i] - stress[1,i]))
+            stress_var2_plot.append((stress[0,i] - stress[1,i]))
+            Stress0 = np.append(Stress0, CurState.Stress0, 1)
+            
+    elif StressDriven:
+        # StressDriven driver
+        # set tolerance value for iterative procedure(s)
+        TOLERANCE = 1e-10 
+
+        for i in range(0, len(stress[0])-1):
+
+            # initialize strain epsilon_{n+1}^{(0)} = eps_{n} using the old state
+            # (this is the initial approximation for eps_{n+1}
+            if i == 0:
+                # special settings for initial values at t_1
+                NextStrain = np.array([0,0,0,0,0,0]).reshape(6,1)
+                dStrain = np.array([0,0,0,0,0,0]).reshape(6,1)
+                CurState = IniState
+            else:
+                NextStrain = CurStrain
+                dStrain = np.array([0,0,0,0,0,0]).reshape(6,1)
+
+            NextStress, NextState, Cep = BSRadialMap(dStrain, StaticParam, CurStress, CurState)
+
+            RR = stress[:, i].reshape(6,1) - NextStress
+            RR = RR.reshape(6,1)
+            RR0 = normS(RR)
+
+            # reset iteration counter
+            kk = 0
+            # iterate until convergence
+            while normS(RR)/RR0 > TOLERANCE:
+                
+                # update strain from eps_{n+1}^{(k)} to eps_{n+1}^{(k+1)}
+                dStrain = np.linalg.solve(Cep, RR)
+                NextStrain = NextStrain + dStrain
+
+                # compute material response for estimated strain state
+                # NOTE: the state variables are taken at t_n
+                NextStress, NextState, Cep = BSRadialMap(dStrain, StaticParam, CurStress, CurState)
+                #print('NextStress:',NextStress)
+                #print('Stress0:',NextState.Stress0)
+                # check for equilibrium
+                RR = stress[:,i].reshape(6,1) - NextStress
+                RR = RR.reshape(6,1)
+                kk = kk + 1
+                # emergence exit if procedure does not converge            
+                if kk > 3:
+                    print('procedure slow to converge. Error : ', normS( RR )/RR0)
+                
+                if kk > 20:
+                    print('procedure did not converge. Error : ', normS( RR )/RR0)
+                    print('YOUR TANGENT Cep IS WRONG', normS( RR )/RR0)
+                    break
+
+                Iter[i] = kk
+                CurStress = NextStress
+                CurState = NextState
+
+
+            # Update State variables for next step
+            CurStress = NextStress
+            CurStrain = NextStrain
+            CurState  = NextState
+
+            # Update variables for plotting purposes
+            strain = np.append(strain, CurStrain, 1)
+            alphaISO_plot.append(CurState.alphaISO)
+            j2_plot.append(GetJ2(CurStress))
+            stress_var_plot.append(np.sqrt(2*j2_plot[i])*np.sqrt(3/2)*np.sign(stress[3,i]))
+            Stress0 = np.append(Stress0, CurState.Stress0, 1)
+                                   
+    DriverOutput = namedtuple('DriverOutput',['StaticParam','time','strain','stress','alphaISO','j2','stress_var','stress_var2', 'Stress0','Iter'])
+    DriverOutput = DriverOutput(StaticParam, time, strain, stress, alphaISO_plot, j2_plot, stress_var_plot, stress_var2_plot, Stress0, Iter)
+    
+    return DriverOutput
+    
+    # =========================================================================
+
+#BREAK
+
+def BSRadialMap(dStrain, StaticParam, CurStress, CurState):
+    # Radial Return Algorithm for J2 Bounding Surface Plasticity Model 
+    # Borja and Amies 1994
+    # Written by Pedro Arduino
+    # Copyright - Arduino Computational Geomechanics Group
+    # March, 2019
+    # Ported into Python/Jupyter Notebook by Justin Bonus
+    # July, 2019
+    #
+    # Input:
+    #    dStrain               ... Strain differential, tn to tn+1
+    #    StaticParam.E         ... Young's modulus
+    #    StaticParam.v         ... poissons ratio
+    #    StaticParam.G         ... Shear modulus
+    #    StaticParam.K         ... Bulk modulus
+    #    StaticParam.hh        ... Kinematic Hardening parameter
+    #    StaticParam.mm        ... Kinematic hardening parameter
+    #    StaticParam.beta      ... Integration parameter (0=expl, 1=impl)
+    #    StaticParam. RR       ... Bounding surface radius
+    #    CurStress             ... Stress at tn
+    #    CurState.eP           ... Plastic strain at tn
+    #    CurState.alphaISO     ... Isotropic internal variable at tn
+    ##   CurState.alphaKIN     ... Kinematic internal variablen at tn
+    #    CurState.Stress0      ... Stress point at unloading
+    #
+    # Output:
+    #    NextStress            ... Stress at tn+1
+    #    CurState.eP           ... Plastic strain at tn
+    #    CurState.alphaISO     ... Isotropic internal variable at tn+1
+    #    CurState.alphaKIN     ... Kinematic internal variablen at tn+1
+    #    Cep                   ... Consistent tangent modulus
+
+    #Static Parameters
+    G = StaticParam.G
+    K = StaticParam.K
+    mm = StaticParam.mm
+    hh = StaticParam.hh
+    beta = StaticParam.beta
+    RR = StaticParam.RR
+
+    tol_rel = 1.0e-10
+    meye = np.eye(6,1); meye[1]=1; meye[2]=1 
+    small = 1.0e-10
+    debugFlag = 1 #Set 0 for true, 1 for false
+
+    Ce = GetCe(StaticParam)
+    NextCep = Ce
+
+    dev_dStrain = dev(dStrain)
+    vol_dStrain = trace(dStrain)
+    res = np.zeros((2,1))
+    
+    
+    NextStress0 = CurState.Stress0
+    dev_NextStress0 = dev(NextStress0)
+    dev_CurStress = dev(CurStress)
+
+    norm_dev_CurStress = normS(dev_CurStress)
+    norm_dev_NextStress0 = normS(dev_NextStress0)
+
+    CurKappa = CurState.Kappa
+    CurPsi = CurState.Psi
+    #Assume next Kappa and Psi are current (will overwrite for loading)
+    NextKappa = CurKappa
+    NextPsi = CurPsi
+    NextalphaISO = CurState.alphaISO
+
+    numerator = innerProduct((-(1 + CurKappa)*dev_CurStress - CurKappa*(1 + CurKappa)*(dev_CurStress - dev_NextStress0)), dev_dStrain, 3)
+    denominator = innerProduct(( (1 + CurKappa)*dev_CurStress - CurKappa*dev_NextStress0), (dev_CurStress - dev_NextStress0), 1)
+
+    if np.absolute(denominator) < small:
+        loadingCond = 0
+    else:
+        loadingCond = numerator/denominator
+
+
+    if loadingCond > 0.0:
+        if debugFlag == 1:
+            print('Unloading Happened')
+
+        NextStress0 = CurStress
+        dev_NextStress0 = dev(NextStress0)
+        loadingCond = 0
+
+    if loadingCond == 0:
+        # ====================================================================================================
+        # unloading (or beginning of loading) just happened
+        if debugFlag == 0:
+            print('Initial Loading') 
+        
+        #Initial pseudo-elastic Psi and Kappa at unloading point
+        NextPsi = 2.0*G 
+        NextKappa = 1.0e6
+        dev_dStrainNorm = normE(dev_dStrain)
+             
+        if np.absolute(dev_dStrainNorm) < small:
+            NextStress = CurStress
+        else:
+            #dStrain deviatoric unit vector
+            dev_dStrainDir = dev_dStrain/dev_dStrainNorm
+            NextH = evalH(StaticParam, NextKappa)
+            res[0] = NextPsi*(1.0 + 3.0*G*beta/NextH)/(2.0*G)-1.0 
+            res[1] = vectorNorm((dev_CurStress+(1.0+NextKappa)*NextPsi*convert2StressLike(dev_dStrain)), 1)/RR - 1.0
+            res_norm = np.sqrt(res[0]**2 + res[1]**2)
+
+            #Initialize Newton variables
+            iter_counter = 0
+            iter_max = 50
+            tol_mat = tol_rel*res_norm
+            incVar = np.zeros((2,1))
+
+            for iter_counter in range(1, iter_max+1):
+                if debugFlag == 0: 
+                    print('Iteration = ', num2str(iter_counter), '  Norm = ', num2str(res_norm))
+                if res_norm < (tol_mat + small):
+                    NextStress = CurStress + K*vol_dStrain*meye + NextPsi*convert2StressLike(dev_dStrain)
+                    break 
+
+                temp = (dev_CurStress + (1 + NextKappa)*NextPsi*convert2StressLike(dev_dStrain))
+                temp = temp / vectorNorm(temp,1)
+                Ktan = np.zeros((2,2))
+                Ktan[0,0] = (1.0 + 3.0*G*beta/NextH) / (2.0*G)
+                Ktan[0,1] = (-3.0*G*NextPsi*beta*mm/hh/(NextKappa**(mm+1.0))/(2.0*G))
+                Ktan[1,0] = ((1.0+NextKappa) * innerProduct(temp, dev_dStrain, 3)) / RR
+                Ktan[1,1] = (innerProduct(temp, NextPsi*convert2StressLike(dev_dStrain), 1)) / RR
+
+                incVar = np.linalg.solve(Ktan, res)  #\ operator is left matrix division, minimizes AX - B
+
+                NextPsi = NextPsi - incVar[0]
+                NextKappa = NextKappa - incVar[1]
+
+                NextH = evalH(StaticParam, NextKappa)
+
+                #Calculate New Residual
+                res[0] = NextPsi*(1.0 + 3.0*G*beta/NextH)/(2.0*G)-1.0 
+                res[1] = vectorNorm(dev_CurStress + (1.0 + NextKappa)*NextPsi*convert2StressLike(dev_dStrain), 1)/RR - 1.0
+                res_norm = np.sqrt(res[0]**2 + res[1]**2)
+
+    else:
+
+        # ====================================================================================================
+        # Continuing Loading
+        if debugFlag == 0: 
+            print('Loading Continues')  
+        
+        
+        CurH = evalH(StaticParam, CurKappa)
+        #Pseudo-elastic assumption
+        NextH = evalH(StaticParam, NextKappa)
+        res[0] = NextPsi*(1.0 + 3.0*G*((1-beta)/CurH + beta/NextH))/(2.0*G)-1.0
+        res[1] = vectorNorm(dev_CurStress + (1.0 + NextKappa)*NextPsi*convert2StressLike(dev_dStrain) + NextKappa*(dev_CurStress - dev_NextStress0), 1)/RR - 1.0
+        res_norm = np.sqrt(res[0]**2+res[1]**2)
+
+        #Initialize Newton variables
+        iter_counter = 0
+        iter_max = 50
+        tol_mat = tol_rel*res_norm
+        incVar = np.zeros((2,1))
+
+        for iter_counter in range(1, iter_max+1): 
+            if debugFlag == 0: 
+                print('Iteration = ', num2str(iter_counter), '  Norm = ', num2str(res_norm))
+            if res_norm < (tol_mat+small):
+                NextStress = CurStress + K*vol_dStrain*meye + NextPsi*convert2StressLike(dev_dStrain)
+                break 
+
+            temp = (dev_CurStress + (1+NextKappa)*NextPsi*convert2StressLike(dev_dStrain) + NextKappa*(dev_CurStress - dev_NextStress0)); 
+            temp = temp / vectorNorm(temp,1)
+            Ktan = np.zeros((2,2))
+            Ktan[0,0] = (1.0+3.0*G*((1-beta)/CurH + beta/NextH)) / (2.0*G)
+            Ktan[0,1] = (-3.0*G*NextPsi*beta*mm/hh/(NextKappa**(mm+1.0))/(2.0*G))
+            Ktan[1,0] = ((1.0+NextKappa) * innerProduct(temp, dev_dStrain, 3)) / RR
+            Ktan[1,1] = (innerProduct(temp, dev_CurStress + NextPsi*convert2StressLike(dev_dStrain)-dev_NextStress0, 1)) / RR
+
+            incVar = np.linalg.solve(Ktan,res) #Since Ktan is nxn: X = A\B | AX = B | X minimizes norm(AX - B)
+            
+            #Real next Psi, Kappa, and H
+            NextPsi = NextPsi - incVar[0]
+            NextKappa = NextKappa - incVar[1]
+            NextH = evalH(StaticParam, NextKappa)
+
+            #Calculate New Residual            
+            res[0] = NextPsi*(1.0+3.0*G*((1-beta)/CurH + beta/NextH))/(2.0*G) - 1.0
+            res[1] = vectorNorm(dev_CurStress+(1.0+NextKappa)*NextPsi*convert2StressLike(dev_dStrain)+ NextKappa*(dev_CurStress - dev_NextStress0), 1)/RR - 1.0
+            res_norm = np.sqrt(res[0]**2 + res[1]**2)
+
+
+    NextStress = CurStress + K*vol_dStrain*meye + NextPsi*convert2StressLike(dev_dStrain)
+
+    # Update State
+    state = namedtuple('state', ['eP','alphaISO','Stress0', 'Kappa', 'Psi'])
+    NextState = state(0, NextalphaISO, NextStress0, NextKappa, NextPsi)
+    
+    #Get 6x6 representations of Ivol and Idev
+    Ivol = GetIvol()
+    Idev = GetIdev()
+    #Ivol = np.array([[np.ones((3,3)), np.zeros((3,3))], [np.zeros((3,3)), np.zeros((3,3))]]).reshape(6,6) # 3Ivol
+    #NOTE: NextCep is equivalent to 3KIvol + 2GIdev when NextPsi is at its elastic state: 2G
+    NextCep = 3*K*Ivol + NextPsi*Idev
+    
+    return NextStress, NextState, NextCep
+
+#BREAK
+
+%%time
+# Run the driver function and assign outputs to variables
+# NOTE: Slow convergence warnings are expected for certain loadcases
+StaticParam, time, strain, stress, alphaISO_plot, j2_plot, stress_var_plot, stress_var2_plot, Stress0, Iter = BSDriver(2)
+
+#BREAK
+
+anidev = animateDeviatoricSurface(time, Stress0, stress, StaticParam.Su)
+anidev
+
+#BREAK
+
+%matplotlib inline
+from matplotlib import pyplot as plt
+
+fig_strain = plt.figure(2)
+plt.plot(time, strain[0], label='\epsilon_11') 
+plt.plot(time, strain[1], label='\epsilon_22') 
+plt.plot(time, strain[2], label='\epsilon_33') 
+plt.plot(time, strain[3], label='\gamma_12') 
+plt.plot(time, strain[4], label='\gamma_23') 
+plt.plot(time, strain[5], label='\gamma_31') 
+
+# Customize plot for readability
+plt.title(f'Strain vs Time')
+plt.xlabel('Time [sec]')
+plt.ylabel('Strain [ ]')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+plt.xlim(0, time.max())
+plt.ylim(strain.min(), strain.max())
+plt.show()
+
+#BREAK
+
+from matplotlib import animation, rc
+from matplotlib.lines import Line2D
+from IPython.display import HTML #Allows for HTML output of animation  
+
+class quadSubplotAnimation(animation.TimedAnimation):
+    #===============================================================================================
+    #Author: Justin Bonus, University of Washington, July 2019
+    #Edited from matplotlib documentation example
+    #
+    #This class allows easy creation of stylish, animated 2D (2x2) subplots in embedded HTML format
+    #User must only specify x, xlabel, y, ylabel for each of the 4 plots before calling the class
+    #Requires ffmpeg for encoding
+    #===============================================================================================
+    import numpy as np
+    %matplotlib inline
+    import matplotlib.pyplot as plt
+     
+
+    def __init__(self):
+        fig = plt.figure()
+        ax1 = fig.add_subplot(2, 2, 1)
+        ax2 = fig.add_subplot(2, 2, 2)
+        ax3 = fig.add_subplot(2, 2, 3)
+        ax4 = fig.add_subplot(2, 2, 4)
+        plt.tight_layout()
+        #ax4 = fig.add_subplot(2, 2)
+        
+        #Define the variables on the right before calling this class
+        self.t = time
+        self.x1, self.xlabel1, self.y1, self.ylabel1 = x1, xlabel1, y1, ylabel1
+        self.x2, self.xlabel2, self.y2, self.ylabel2 = x2, xlabel2, y2, ylabel2
+        self.x3, self.xlabel3, self.y3, self.ylabel3 = x3, xlabel3, y3, ylabel3
+        self.x4, self.xlabel4, self.y4, self.ylabel4 = x4, xlabel4, y4, ylabel4
+
+        ax1.set_xlabel(self.xlabel1)
+        ax1.set_ylabel(self.ylabel1)
+        self.line1 = Line2D([], [], color='black')
+        self.line1a = Line2D([], [], color='red', linewidth=2)
+        self.line1e = Line2D(
+            [], [], color='red', marker='o', markeredgecolor='r')
+        ax1.add_line(self.line1)
+        ax1.add_line(self.line1a)
+        ax1.add_line(self.line1e)
+        ax1.set_xlim(x1.min(), x1.max())
+        ax1.set_ylim(y1.min(), y1.max())
+        #ax1.set_aspect('equal', 'datalim')
+
+        ax2.set_xlabel(self.xlabel2)
+        ax2.set_ylabel(self.ylabel2)
+        self.line2 = Line2D([], [], color='black')
+        self.line2a = Line2D([], [], color='red', linewidth=2)
+        self.line2e = Line2D(
+            [], [], color='red', marker='o', markeredgecolor='r')
+        ax2.add_line(self.line2)
+        ax2.add_line(self.line2a)
+        ax2.add_line(self.line2e)
+        ax2.set_xlim(x2.min(), x2.max())
+        ax2.set_ylim(y2.min(), y2.max())
+
+        ax3.set_xlabel(self.xlabel3)
+        ax3.set_ylabel(self.ylabel3)
+        self.line3 = Line2D([], [], color='black')
+        self.line3a = Line2D([], [], color='red', linewidth=2)
+        self.line3e = Line2D(
+            [], [], color='red', marker='o', markeredgecolor='r')
+        ax3.add_line(self.line3)
+        ax3.add_line(self.line3a)
+        ax3.add_line(self.line3e)
+        ax3.set_xlim(x3.min(), x3.max())
+        ax3.set_ylim(y3.min(), y3.max())
+
+        ax4.set_xlabel(self.xlabel4)
+        ax4.set_ylabel(self.ylabel4)
+        self.line4 = Line2D([], [], color='black')
+        self.line4a = Line2D([], [], color='red', linewidth=2)
+        self.line4e = Line2D(
+            [], [], color='red', marker='o', markeredgecolor='r')
+        ax4.add_line(self.line4)
+        ax4.add_line(self.line4a)
+        ax4.add_line(self.line4e)
+        ax4.set_xlim(x4.min(), x4.max())
+        ax4.set_ylim(y4.min(), y4.max())
+        fig.set_size_inches(h=8,w=8)
+        plt.tight_layout()
+        animation.TimedAnimation.__init__(self, fig, interval=50, blit=True)
+
+    def _draw_frame(self, framedata):
+        i = framedata
+        head = i - 1
+        head_slice = (self.t > self.t[i] - 1.0) & (self.t < self.t[i])
+
+        self.line1.set_data(self.x1[:i], self.y1[:i])
+        self.line1a.set_data(self.x1[head_slice], self.y1[head_slice])
+        self.line1e.set_data(self.x1[head], self.y1[head])
+
+        self.line2.set_data(self.x2[:i], self.y2[:i])
+        self.line2a.set_data(self.x2[head_slice], self.y2[head_slice])
+        self.line2e.set_data(self.x2[head], self.y2[head])
+
+        self.line3.set_data(self.x3[:i], self.y3[:i])
+        self.line3a.set_data(self.x3[head_slice], self.y3[head_slice])
+        self.line3e.set_data(self.x3[head], self.y3[head])
+        
+        self.line4.set_data(self.x4[:i], self.y4[:i])
+        self.line4a.set_data(self.x4[head_slice], self.y4[head_slice])
+        self.line4e.set_data(self.x4[head], self.y4[head])
+
+        self._drawn_artists = [self.line1, self.line1a, self.line1e,
+                               self.line2, self.line2a, self.line2e,
+                               self.line3, self.line3a, self.line3e,
+                               self.line4, self.line4a, self.line4e]
+
+    def new_frame_seq(self):
+        return iter(range(self.t.size))
+
+    def _init_draw(self):
+        lines = [self.line1, self.line1a, self.line1e,
+                 self.line2, self.line2a, self.line2e,
+                 self.line3, self.line3a, self.line3e,
+                 self.line4, self.line4a, self.line4e]
+        for l in lines:
+            l.set_data([], [])
+            
+    #===============================================================================================
+
+#BREAK
+
+x1 = time
+xlabel1 = 'Time [s]'
+y1 = strain[3]
+ylabel1 = '$\gamma_{12}$'
+
+x2 = time
+xlabel2 = 'Time [s]'
+y2 = stress[3]
+ylabel2 = '\N{greek small letter tau}$_{12}$'
+
+x3 = strain[0]
+xlabel3 = '$\epsilon_{11}$'
+y3 = stress[0]
+ylabel3 = '$\sigma_{11}$'
+
+x4 = strain[3]
+xlabel4 = '$\gamma_{12}$'
+y4 = stress[3]
+ylabel4 = '\N{greek small letter tau}$_{12}$'
+            
+ani = quadSubplotAnimation()
+HTML(ani.to_html5_video())
+rc('animation', html='html5')
+ani
+
+#BREAK
+
+fig_stress_time = plt.figure(3)
+plt.plot(time, stress[0], label='$\sigma_{11}$') 
+plt.plot(time, stress[1], label='$\sigma_{22}$') 
+plt.plot(time, stress[2], label='$\sigma_{33}$') 
+plt.plot(time, stress[3], label='\N{greek small letter tau}$_{12}$') 
+plt.plot(time, stress[4], label='\N{greek small letter tau}$_{23}$') 
+plt.plot(time, stress[5], label='\N{greek small letter tau}$_{13}$') 
+
+plt.title(f'Stress vs Time')
+plt.xlabel('Time [s]')
+plt.ylabel('Stress [MPa]')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+#plt.xlim(strain.min(), strain.max())
+plt.ylim(stress.min(), stress.max())
+plt.show()
+
+#BREAK
+
+plt.close()
+
+fig_sigma_epsilon = plt.figure(4)
+plt.plot(strain[0], stress[0]) 
+plt.plot(strain[1], stress[1]) 
+plt.plot(strain[2], stress[2]) 
+
+plt.title(f'$\sigma vs \epsilon$')
+plt.xlabel('\epsilon [ ]')
+plt.ylabel('\sigma [MPa]')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+#plt.xlim(0, time.max())
+#plt.ylim(strain.min(), strain.max())
+plt.show()
+
+#BREAK
+
+plt.close()
+
+fig_tau_gamma = plt.figure(5)
+plt.plot(strain[3], stress[3]) 
+plt.plot(strain[4], stress[4]) 
+plt.plot(strain[5], stress[5])
+
+plt.title('\N{greek small letter tau}$_{12}$ vs $\gamma$')
+plt.xlabel('$\gamma [ ]$')
+plt.ylabel('\N{greek small letter tau}$_{12} [ ]$')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+#plt.xlim(0, time.max())
+#plt.ylim(strain.min(), strain.max())
+plt.show()
+
+
+fig_gamma12_time = plt.figure(6)
+plt.plot(time, strain[3])
+plt.title('$\gamma_{12}$ vs. time')
+plt.xlabel('time [s]')
+plt.ylabel('$\gamma_{12}$')
+plt.show()
+
+
+
+sqrt2j2 = np.zeros((len(j2_plot),1))
+for i in range(0, len(j2_plot)):    
+    sqrt2j2[i] = (2*j2_plot[i])**0.5
+
+fig_sqrt2j2_gamma12 = plt.figure(7)
+plt.plot(strain[3],sqrt2j2)
+plt.title('$(2*J_{2})^{1/2}$ vs. $\gamma_{12}$')
+plt.xlabel('$\gamma_{12}$')
+plt.ylabel('$((2*J_2)^{1/2}$')
+plt.show()
+
+fig_tau12g100_gamma12 = plt.figure(8)
+plt.plot(strain[3], (stress[3]/StaticParam.G)*100)
+plt.title('(\N{greek small letter tau}$_{12}/G)*100$ vs. $\gamma_{12}$')
+plt.xlabel('$\gamma_{12}$')
+plt.ylabel('(\N{greek small letter tau}$_{12}}/G)*100$')
+plt.show()
+
+#BREAK
+
+#Create traceStress and normDevStress
+traceStress, normDevStress = [], []
+for i in range (0, stress.shape[1]):
+    curTrace = sum(stress[0:3,i])
+    traceStress.append(curTrace)
+    devStress   = stress[0:6,i].reshape(6,1) - 1/3 * np.array([1, 1, 1, 0, 0, 0 ]).reshape(6,1) * curTrace
+    devStress2  = np.multiply(devStress, devStress)
+    normDevStress.append(np.sqrt( sum(devStress2[0:3,:]) + 2*sum(devStress2[3:6,:]) ))
+traceStress = np.array([traceStress]).reshape(len(traceStress),1)
+normDevStress = np.array([normDevStress]).reshape(len(normDevStress),1)
+    
+#Create sqrt2j2
+sqrt2j2 = np.zeros((len(j2_plot),1))
+for i in range(0, len(j2_plot)):    
+    if j2_plot[i] == 0:
+        sqrt2j2[i]=0
+    else:
+        sqrt2j2[i] = (2*j2_plot[i])**0.5
+
+x1 = strain[3]
+xlabel1 = '$\gamma_{12}$'
+y1 = (stress[3]/StaticParam.G)*100
+ylabel1 = '$100 * \N{greek small letter tau}$_{12}/G$'
+
+x2 = strain[3]
+xlabel2 = '$\gamma_{12}$'
+y2 = sqrt2j2
+ylabel2 = '$\sqrt{2J_2}$'
+
+x3 = traceStress
+xlabel3 = 'tr($\sigma$) []'
+y3 = normDevStress
+ylabel3 = '||$\sigma\'$|| [MPa]'
+
+x4 = time
+xlabel4 = 'Time [s]'
+y4 = Iter
+ylabel4 = '# of Iterations'            
+    
+ani_misc = quadSubplotAnimation()
+HTML(ani_misc.to_html5_video())
+rc('animation', html='html5')
+ani_misc
+
+#BREAK
+
+fig_bound = plt.figure(9)
+plt.plot(strain[3],stress[3])
+plt.title(f'\sigma_{12} vs. \gamma_{12}')
+plt.xlabel(f'\gamma_{12}')
+plt.ylabel(f'\sigma_{12}')
+plt.show()
+
+#BREAK
+
+plt.close()
+fig_traceStress_normDevStress = plt.figure(10)
+traceStress, normDevStress = [], []
+for i in range (0,stress.shape[1]):
+    curTrace = sum(stress[0:3,i])
+    traceStress.append(curTrace)
+    devStress   = stress[0:6,i].reshape(6,1) - 1/3 * np.array([1, 1, 1, 0, 0, 0 ]).reshape(6,1) * curTrace
+    devStress2  = np.multiply(devStress, devStress)
+    normDevStress.append(np.sqrt( sum( devStress2[0:3,:] ) + 2* sum( devStress2[3:6,:] ) ))
+
+# Customize plot for readability
+plt.plot(traceStress, normDevStress)
+plt.title(f'||s|| vs. trace(\sigma)')
+plt.xlabel('trace(\sigma)')
+plt.ylabel('||s||')
+plt.show()
+
+
+#BREAK
+
+fig_iter_step = plt.figure(11)
+plt.plot(time, Iter)
+plt.title(f'# of Iterations vs. Step')
+plt.xlabel('step [#]')
+plt.ylabel('Iterations [#]')
+plt.xlim(0, time.max())
+plt.ylim(0, 10)
+plt.show()
+
+#BREAK
+
+fig = plt.figure(12)
+xx = strain[0] + 1j * strain[0][:, np.newaxis]
+plt.imshow(np.abs(xx), extent=[-10, 10, -10, 10], cmap='gray')
+plt.show()
+
+#BREAK
+
+fig = plt.figure(13)
+xx = stress[0] + 1j * stress[0][:, np.newaxis]
+plt.imshow(np.abs(xx), extent=[-10, 10, -10, 10], cmap='gray')
+plt.show()
+
+#BREAK
+
+fig = plt.figure(14)
+xx = strain[3] + 1j * strain[3][:, np.newaxis]
+plt.imshow(np.abs(xx), extent=[-10, 10, -10, 10], cmap='gray')
+plt.show()
+
+#BREAK
+
+fig = plt.figure(15)
+xx = stress[3] + 1j * stress[3][:, np.newaxis]
+plt.imshow(np.abs(xx), extent=[-10, 10, -10, 10], cmap='gray')
+plt.show()
+
+#BREAK
+
+%matplotlib inline
+import matplotlib.pyplot as plt
+[X, Y] = np.meshgrid(strain, time)
+extent = [strain.min(), strain.max(), time.min(), time.max()]
+im = plt.imshow(strain, interpolation='bilinear', cmap=matplotlib.cm.viridis,  
+                extent=extent, aspect=1./2000., origin='lower')
+
+plt.title("P Phase Objective Function")
+plt.xlabel('Strain')
+plt.ylabel('Time [s]')
+plt.show()
+
+
+#BREAK
+
+#=============== MATRIX SETTINGS ===============
+res_x = 101
+res_y = 101
+minKappa = 1e-5
+maxKappa = 1e5
+#===============================================
+
+#BREAK
+
+#============== STATIC PARAMETERS ==============
+E = 20 #Elastic Modulus  MPa
+v= 0.49 #Poissons ratio, less than 0.5 to allow compresibility
+G = E/(2*(1+v)) #Shear modulus
+K = E/(3*(1-2*v)) #Bulk modulus
+Kmod = 0 #Isotropic Hardening
+Su = 0.061 #Yield stress in 1-D tension test MPa
+hh = G #kinematic hardening parameter
+mm = 1.0 #kinematic hardening parameter
+beta = 0.5 #midpoint integration
+RR = np.sqrt(8/3)*Su
+#===============================================
+
+#BREAK
+
+def kappaLayer(res_x, res_y, minKappa, maxKappa, Stress0):
+    #===============================================================================================
+    # Kappa Matrix layer creator for Borjas & Amies 1994 bounding surface constitutive model
+    #===============================================================================================
+    # Author: Justin K. Bonus, University of Washington
+    # Created: July 21, 2019
+    #
+    # This function creates a complete matrix of all possible kappa values relative to 
+    # the last point of unloading.
+    # In construction it is agnostic to the active stress point angular position and bounding 
+    # surface but in use both must be known to properly access the matrix.
+    #
+    # One layer of the kappa matrix is made with this function, meaning it only defines
+    # kappa contours for a single unloading point. To fully define a BA model's potential 
+    # kappas for any unloading and any active stress, int((res_y)/2)+1 'layers' must be assembled.
+    # Note that this will require 'rotation' of input stresses during use, but saves massive 
+    # amounts of disk space and pre-computational time. 
+    # Further space can also be saved by considering the symetry of the matrix on the y-centerline
+    # and by using polar coordinates (to trim off indices outside the bounding surface)
+    #
+    # NOTE: This method is highly dependent on input resolution. High resolution will create a
+    # profile that is extremely close to the true function, but at low resolutions it will appear
+    # to be fairly discontinuous around the centerline and circles will be rough.
+    #
+    # Workflow: 
+    # 0.) Consider centerline symetry (optional, by default it is not used)
+    # 1.) Beginning in cartesian coordinates, create zeros matrix of the desired size
+    # 2.) Create a ring to represent the bounds of the deviatoric space, set temporary -1. value
+    # 3.) Fully evaluate the kappa values in each cell of the centerline, utilizing 1D equation
+    # 4.) For each point, find another point opposite the kappa singularity that are equal/near-equal
+    # 5.) Define circle contour radii and midpoints from the matched points
+    # 6.) Create the kappa value contours with the ring function
+    # 7.) Insert new contours onto main matrix, careful to not overwrite/underwrite (thresholds)
+    # 8.) Convert to polar coordinates for compactness
+    #===============================================================================================
+    import numpy as np
+    from skimage.draw import circle
+    from skimage.draw import circle_perimeter
+    
+    radius = int(res_x/2)
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+    
+    def ringOld(res_x, res_y, cen_x, cen_y, radius, value):
+        #Create a meshgrid for easy index evaluation
+        xx, yy = np.mgrid[:res_x, :res_y]
+        # Circle contains the squared distance to the (res_x/2, res_y/2) point
+        # Higher thresh allows for 'thicker' and more 'continous' circles but can overwrite previous values 
+        # thresh = a*radius**1 works well most times, with a in the range of 0.9 to 2
+        thresh = 1.05*radius**1
+        center = np.array([cen_x, cen_y])
+        circle = (xx - center[1]) ** 2 + (yy - center[0]) ** 2
+        
+        # Donut contains Trues and Falses organized in a ring shape
+        # Convert to 1s and 0s and then multiply by 'value', should generally be a float
+        donut = np.logical_and(circle < (radius**2 + thresh), circle > (radius**2 - thresh))
+        donut = value*donut.astype(int)
+        return donut
+    
+    def ring(res_x, res_y, midpoint, radius, kappaSouth, kappaNorth):
+        # Use Scikit to create efficient circle coordinates
+        from skimage.draw import circle_perimeter
+        cen_x = int(np.floor(res_x/2))
+        cen_y = int(np.floor(res_y/2))
+        rr, cc = circle_perimeter(midpoint, cen_x, radius) # Creates coordinates
+        donut = np.zeros((res_y, res_x)) # Create empty matrix
+        south = np.array([[-1],[0]]) # South unit vector
+        for yy, xx in zip(rr,cc):
+            yy = yy - midpoint
+            xx = xx - cen_x
+            index = np.array([[yy],[xx]])
+            angle = np.abs(angleIndex(south, index)) # (0 to pi)
+            # Weight kappa value at coordinate by angle to south
+            donut[rr, cc] = kappaSouth - (angle/np.pi)*(kappaSouth - kappaNorth)
+        return donut
+        
+    # Define area within bounding surface with -1 values, outside with 0 values
+    rr, cc = circle(cen_y, cen_x, radius)
+    cart = np.zeros((res_y,res_x))
+    cart[rr,cc] = -1
+    
+    # Define the bounding surface shape with -2 values
+    rr, cc = circle_perimeter(cen_y,cen_x, radius)
+    cart[rr,cc] = -2
+    
+    # Apply maxKappa value to unloading point, minKappa value to extents of centerline 
+    cart[Stress0[0],Stress0[1]] = maxKappa
+    cart[0, cen_x], cart[res_y-1, cen_x] = minKappa, minKappa
+
+    # Solve kappa for each cell on the vertical centerline using 1D equation
+    # \kappa = (|\sigma'_hat|-|\sigma'|)/(|\sigma'-\sigma'_0|)
+    for j in range(0, res_y):
+        #cart[j,cen_x] = np.abs(cen_y - np.abs(cen_y-j))/np.abs((cen_y-j)-(cen_y-Stress0[0]))
+        #if j < Stress0[0]:
+        #    cart[j,cen_x] = (cen_y - np.abs(cen_y-j))/np.abs((cen_y-j)-(cen_y-Stress0[0]))
+        if j < cen_y and j > Stress0[0]:
+            cart[j,cen_x] = (cen_y + np.abs(cen_y-j))/np.abs((cen_y-j)-(cen_y-Stress0[0]))
+        else:
+            cart[j,cen_x] = (cen_y - np.abs(cen_y-j))/np.abs((cen_y-j)-(cen_y-Stress0[0]))
+    
+    #Evaluate points on center-line, below Stress0 y-center
+    for ja in range(Stress0[0]+1,res_y):
+        hold = [] 
+
+        # Evaluate points on center-line, above Stress0 y-center
+        for jb in range(1,Stress0[0]):
+            # Contain kappa differentials in a list, we want the smallest one 
+            # This will allow us to define to points of equipotential
+            hold.append(np.abs(cart[jb,cen_x] - cart[ja,cen_x]))  
+        if len(hold) != 0:
+            jb = hold.index(min(hold)) #jb the best matches ja index
+            midpoint = int(np.round((ja+jb)/2)) #Finds index of kappa contour midpoint 
+            rad = int(np.abs(midpoint-ja)) #Determines radius of contour
+            kappaSouth = cart[ja,cen_x]
+            kappaNorth = cart[jb,cen_x]
+        else:
+            # When at bounding surface?
+            midpoint = int(np.round((ja)/2))
+            rad = int(np.abs(midpoint-ja)) 
+            kappaSouth = cart[ja,cen_x]
+            kappaNorth = cart[ja,cen_x]
+        
+        donut = ring(res_x, res_y, midpoint, rad, kappaSouth, kappaNorth)
+        
+        #Insert all kappa contours into main array 
+        for x in range(0,res_x):
+            #Prevent overwriting of vertical kappa_line
+            if x == Stress0[1]:
+                continue
+            for y in range(0,res_y):
+                if donut[y,x] == 0:
+                    # Skip zero values   
+                    continue
+                if cart[y,x] == -1:
+                    # Cell is 'empty', write \kappa value to it
+                    cart[y,x] = donut[y,x]
+                elif cart[y,x] > 0:
+                    if cart[y,x] > donut[y,x]:
+                        cart[y,x] = donut[y,x]
+                    
+
+    #center_list = center_listNorth + centerlistSouth
+    
+    #============= POST-PROCESS ============= 
+    
+    #Ensure \kappa singularity is still maximum value
+    cart[Stress0[0],Stress0[1]] = maxKappa
+    # Having the maxKappa on the boundary surface could cause the stress to exit the surface 
+    # depending on dStrain, but not having it could prevent stress from retreating?
+    
+    # Reapply bounding surface
+    rr, cc = circle_perimeter(cen_y,cen_x, radius)
+    cart[rr,cc] = minKappa
+    
+    fill = True
+    if fill:
+        xp = np.asarray(np.nonzero(cart.ravel() > 0))
+        fp = cart[np.nonzero(cart > 0)]
+        fp = np.asarray(fp).reshape(1,fp.shape[0])
+        x  = np.nonzero(cart.ravel() == -1)
+        cart[np.nonzero(cart == -1)] = np.interp(x, xp[0,:], fp[0,:])
+      
+    return cart #, center_list
+
+#BREAK
+
+res_y = 101
+cen_x = int(np.floor(res_y/2))
+center_listSouth = [5,4,4,3,2,1,0,0,1,2,3,4,5]
+
+#center_listNorth = [5,1,2,4,4,5]
+Stress0 = np.array([[20],[cen_x]])
+
+northCells = (res_y - 1) - len(center_listSouth)
+print('northCells:', northCells)
+
+if northCells > 0:
+    smallestKernel = int(np.ceil(len(center_listSouth) / northCells))
+    if smallestKernel == len(center_listSouth):
+        print('smallestKernel:',smallestKernel)
+        kernel = np.arange(1) + smallestKernel
+    else:
+        kernel = np.arange(len(center_listSouth) - smallestKernel) + smallestKernel
+    #largestStride = int()
+    stride = np.arange(len(center_listSouth)) + 1
+    print('kernel:', kernel)
+    print('stride:', stride)
+    exit = False
+    hold_k, hold_s = [], []
+    for k in kernel:
+        for s in stride:
+            runs = 0
+            far = k
+            limit = len(center_listSouth)
+            while far <= limit:
+                far = far + s
+                runs = runs+1
+
+            if runs == northCells:
+                hold_k.append(k)
+                hold_s.append(s)
+                if far == limit:
+                    kernel = k
+                    stride = s   
+                    exit = True
+                    break
+        if exit:
+            print('Exited.')
+            break
+
+    if exit == False:
+        kernel = hold_k[0]
+        stride = hold_s[0]
+        runs = northCells
+        print('Did not exit.')
+    #if runs != northCells:
+
+else:
+    kernel = 0
+    stride = 0
+    runs = 0
+    
+print('kernel:', kernel, '| stride:', stride, '| runs:', runs)            
+
+center_listNorth = []
+for r in range(0,runs):
+    start = r * stride
+    stop = start + kernel
+    ave = sum(center_listSouth[start:stop])/kernel
+    ave = np.round(ave,2)
+    center_listNorth.append(ave)
+    r = r+1
+#u, indices, counts = np.unique(np.asarray(center_listNorth), return_inverse=True, return_counts = True)
+#print('u:',u)
+#print('indexes:',indices)
+#print('counts:',counts)
+#reconstruct = u[indices]
+#print('reconstruct:',reconstruct)
+
+
+print('')
+center_list = center_listNorth + center_listSouth[::-1]
+print('center_list:',center_list)
+print('len(center_list):', len(center_list))
+#print(np.asarray(center_list).reshape(len(center_list),1))
+
+#BREAK
+
+def kappaMatrix(res_x, res_y, minKappa, maxKappa):
+    #===============================================================================================
+    # Kappa Matrix creator for Borjas & Amies 1994 bounding surface constitutive model
+    #===============================================================================================
+    # Author: Justin K. Bonus, University of Washington
+    # Created: July 21, 2019
+    #
+    #===============================================================================================
+
+    import numpy as np
+
+    #Center of space, requires odd number resolution for a true center
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+    #Point of last unloading by index, will need a mapping algorithm to relate to deviatoric stresses
+    #Unloading x index should always be centered in space, may require stress rotation in driver 
+    #Do not have the y-index exceed cen_y, as it is redundant
+    Stress0 = np.array([ cen_y-int(cen_y/2), cen_x ])
+    
+    
+    kappa_matrix = np.empty((res_y, res_x))
+    #center_list = [] # List to hold center positions for each countour circle
+    print(kappa_matrix.shape)
+    for layer in range(0,int(np.floor(res_y/2))):
+        print('Layer:', layer, 'of ', int(res_y/2))
+        Stress0 = np.array([ cen_y - layer, cen_x ])
+        cart = kappaLayer(res_x, res_y, minKappa, maxKappa, Stress0)
+        #center_list.append(center)
+        if layer == 0:
+            kappa_matrix = cart 
+        else:
+            kappa_matrix = np.dstack((kappa_matrix,cart))
+        
+    print(kappa_matrix.shape)
+    
+    return kappa_matrix #, center_array
+
+#BREAK
+
+#======================================================
+kappaM = kappaMatrix(res_x, res_y, minKappa, maxKappa)
+#======================================================
+
+
+# Write array to disk
+with open('kappaMatrix.txt', 'w') as outfile:
+    # Text header for readibility
+    outfile.write('# Array shape: {0}\n'.format(kappaM.shape))
+
+    # Iterating through a ndimensional array produces slices along
+    # the last axis. This is equivalent to data[i,:,:] in this case
+    for data_slice in kappaM:
+
+        # Left-justified columns 7 characters in width, 8 decimal places.  
+        np.savetxt(outfile, data_slice, fmt='%-7.8f')
+
+        # Layer breaks using '#', won't be read by loadtxt()
+        outfile.write('# New slice\n')
+
+# Remove array from RAM
+kappaM = None 
+
+print('kappaMatrix.txt saved to disk and removed from RAM.')
+
+#BREAK
+
+# Read the array from disk
+cen_y = int(np.floor(res_y/2))
+kappaM = np.loadtxt('kappaMatrix.txt').reshape((res_y,res_x,cen_y)) # Returns 3D array
+
+print('Loaded array kappaM into RAM, shape:', kappaM.shape)
+
+#BREAK
+
+    #================= PLOTTING KAPPA LAYER - STATIC =================
+    %matplotlib inline
+    import numpy as np
+    import matplotlib
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    #Center of space, requires odd number resolution for a true center
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+
+    #Point of last unloading by index, will need a mapping algorithm to relate to deviatoric stresses
+    #Unloading x index should always be centered in space, may require stress rotation in driver 
+    #Do not have the y-index exceed cen_y, as it is redundant
+    Stress0 = np.array([ cen_y - int(cen_y/3), cen_x ])
+    #Stress0 = np.array([ 3, cen_x ])
+    
+    cart = kappaLayer(res_x, res_y, minKappa, maxKappa, Stress0)
+    kappaline = cart[:,cen_x]
+    midpoints = -(kappaline*(cen_y - Stress0[0]))/(kappaline + 1) + cen_y
+    centerline = np.linspace(0,res_y,res_y)
+    
+    fig, (ax1, ax2) = plt.subplots(1,2, sharey=True, gridspec_kw={'wspace': 0})
+
+    #Plot \kappa heatmap in deviatoric index view
+    extent = [0,res_x,res_y,0]
+    ax1.set_xlabel('X-Index',fontsize=14)
+    ax1.set_ylabel('Y-Index',fontsize=14)
+    ax1.set_ylim([res_y,0])
+    kappa_display = ax1.imshow(cart,cmap='inferno',interpolation='nearest', norm=matplotlib.colors.LogNorm(), extent=extent)
+    plt.colorbar(kappa_display)
+
+    #Plot centerline \kappa distribution in logspace
+    ax2.set_xlabel('Centerline $\kappa$ Value',fontsize=14)
+    ax2.set_xscale('log')
+    ax2.set_xlim([minKappa,maxKappa])
+    ax2.set_ylim([res_y,0])
+    ax2.plot(kappaline, centerline, color = 'black', antialiased=True)
+    ax2.plot(np.sort(kappaline), np.sort(midpoints)[::-1], color = 'red', antialiased=True)
+    # fit subplots and save fig
+    fig.tight_layout()
+    fig.set_size_inches(w=10,h=5)
+    fig_name = 'kappa_layer_visual'
+    fig.savefig(fig_name)
+
+    plt.show()
+
+    #===================================================================
+
+#BREAK
+
+%matplotlib inline
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+cen_x = int(np.floor(res_x/2))
+cen_y = int(np.floor(res_y/2))
+
+Stress0 = np.array([ cen_y - int(cen_y/2), cen_x ])
+cart = kappaLayer(res_x, res_y, minKappa, maxKappa, Stress0)
+
+x = range(res_x)
+y = range(res_y)
+
+for i in range(0,res_x):
+    for j in range(0,res_y):
+        if cart[j,i] <=0:
+            cart[j,i] = minKappa            
+
+cart_log = np.log(cart)
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+X, Y = np.meshgrid(x, y)  # `plot_surface` expects `x` and `y` data to be 2D,
+surf = ax.plot_surface(X, Y, cart_log, cmap='inferno', antialiased=True, rstride=1, cstride=1, alpha=1)
+surf
+fig.colorbar(surf,shrink=0.5,aspect=20)
+
+#Make the panes transparent
+ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+
+#Make the grid lines transparent
+ax.set_axis_off()
+ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+fig.set_size_inches(w=10,h=10)
+plt.tight_layout
+plt.show()
+
+#BREAK
+
+def kappaMatrix_animation(res_x, res_y, minKappa, maxKappa):
+    #================= PLOTTING KAPPA MATRIX - Animation ====================
+    # Author: Justin Bonus, July 2019, University of Washington
+    # 
+    # This functions creates an animation for the desired size of a kappa 
+    # matrix by directly calling the kappaMatrix() function. the animation
+    # can be embedded as an html, saved as a .gif, or put into .mp4 format
+    #========================================================================
+    
+    import numpy as np
+    %matplotlib inline
+    import matplotlib.pyplot as plt
+    import mpl_toolkits.mplot3d.axes3d as p3
+    import matplotlib.animation as animation
+    from matplotlib import rc
+    from IPython.display import HTML #Allows for HTML output of animation   
+
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+ 
+    kappa_matrix = kappaMatrix(res_x, res_y, minKappa, maxKappa)
+    centerline = np.linspace(0,res_y,res_y)
+    extent = [0,res_x,res_y,0]
+    
+    fig, (ax1,ax2) = plt.subplots(1,2, sharey=True, gridspec_kw={'wspace': 0})
+    
+    global kappa_display
+    global kappa_line
+    kappa_display, kappa_line = None, None
+    
+    def update(frame):
+        global kappa_display, kappa_line
+        # If a line collection is already remove it before drawing. Creates a 'clean-slate' each frame
+        print(frame)
+        if kappa_line:
+            ax1.clear()
+            ax2.clear()
+        centerline = np.linspace(0,res_y,res_y)
+        cart = kappa_matrix[:,:,frame]
+        kappaline = cart[:,cen_x]
+        kappa_display = ax1.imshow(cart,cmap='inferno',interpolation='nearest', norm=matplotlib.colors.LogNorm(), extent=extent, animated=True)
+        ax1.set_xlabel('X-Index',fontsize=14)
+        ax1.set_ylabel('Y-Index',fontsize=14)
+        if frame ==0:
+            plt.colorbar(kappa_display)
+            fig.set_size_inches(w=10,h=5)
+        kappa_line = ax2.plot(kappaline, centerline, color = 'black', antialiased=True)
+        #Plot \kappa heatmap in deviatoric index view
+        #extent = [0,res_x,res_y,0]
+        #ax1.get_shared_y_axes().join(ax1, ax2)
+      
+
+        #Plot centerline \kappa distribution in logspace
+        ax2.set_xlabel('Centerline $\kappa$ Value',fontsize=14)
+        ax2.set_xscale('log')
+        ax2.set_xlim([minKappa,maxKappa])
+        ax2.set_ylim([res_y,0])
+        
+    def init():
+        #Plot \kappa heatmap in deviatoric index view
+        #extent = [0,res_x,res_y,0]
+        #ax1.set_xlabel('X-Index',fontsize=14)
+        #ax1.set_ylabel('Y-Index',fontsize=14)
+        #plt.colorbar(kappa_display)
+
+        #Plot centerline \kappa distribution in logspace
+        #ax2.set_xlabel('Centerline $\kappa$ Value',fontsize=14)
+        #ax2.set_xscale('log')
+        #ax2.set_xlim([minKappa,maxKappa])
+        #ax2.set_ylim([res_y,0])
+
+        # fit subplots and save fig
+        #fig.tight_layout()
+        #fig.set_size_inches(w=10,h=5)
+        #fig_name = 'kappa_layer_visual'
+        #ig.savefig(fig_name)
+        pass
+    
+    anikappa = animation.FuncAnimation(fig, update, cen_x, init_func=init, interval=150, blit=False, repeat=True)
+    
+    #Save .gif and .mp4 of animation in directory, increases compile time. Toggle off for speed
+    #fn = 'deviatoricSurface_funcanimation' #Filename
+    ##anidev.save(fn+'.mp4',writer='ffmpeg',fps=fps)
+    ##anidev.save(fn+'.gif',writer='imagemagick',fps=fps)
+    
+    #For compressing the gif:
+    #import subprocess
+    #cmd = 'magick convert %s.gif -fuzz 5%% -layers Optimize %s_r.gif'%(fn,fn)
+    #subprocess.check_output(cmd, shell=True)
+    
+    #Embed HTML video of animation in notebook
+    #HTML(anidev.to_html5_video())
+    #rc('animation', html='html5')
+    plt.rcParams['animation.html'] = 'html5'
+    return anikappa
+    #===================================================================
+
+#BREAK
+
+#Resolution of space (total x,y extent). Should be equivalent, odd integers
+res_x_ani = res_x
+res_y_ani = res_y
+
+#Minimum and maximum values for kappa. Effects visual output, requires logscale
+maxKappa_ani = maxKappa
+minKappa_ani = minKappa
+
+anikappa = kappaMatrix_animation(res_x_ani,res_y_ani,minKappa_ani,maxKappa_ani)
+anikappa
+
+#BREAK
+
+def hardeningMatrix(h, m, kappaMatrix):
+    #=====================================================================================
+    # Hardening Matrix creator for Borjas & Amies 1994 bounding surface constitutive model
+    #=====================================================================================
+    # Author: Justin K. Bonus, University of Washington
+    # Created: July 28, 2019
+    #
+    # Requires access to a previously computed \kappa matrix.
+    # Choice of hardening function significantly effects the final matrix, in both values
+    # and dimensionality.
+    #=====================================================================================
+    
+    # Exponential hardening function
+    # H' = h\kappa^m
+    hardeningMatrix = h*kappaMatrix**m
+    
+    return hardeningMatrix
+
+#BREAK
+
+#============================================
+hardeningM = hardeningMatrix(hh, mm, kappaM)
+#============================================
+
+
+# Write array to disk
+with open('hardeningMatrix.txt', 'w') as outfile:
+    # Text header for readibility
+    outfile.write('# Array shape: {0}\n'.format(hardeningM.shape))
+
+    # Iterating through a ndimensional array produces slices along
+    # the last axis. This is equivalent to data[i,:,:] in this case
+    for data_slice in hardeningM:
+
+        # Left-justified columns 7 characters in width, 8 decimal places.  
+        np.savetxt(outfile, data_slice, fmt='%-7.8f')
+
+        # Layer breaks using '#', won't be read by loadtxt()
+        outfile.write('# New slice\n')
+
+# Remove array from RAM
+hardeningM = None 
+
+print('hardeningMatrix.txt saved to disk and removed from RAM.')
+
+#BREAK
+
+# Read the array from disk
+cen_y = int(np.floor(res_y/2))
+hardeningM = np.loadtxt('hardeningMatrix.txt').reshape((res_y,res_x,cen_y)) # Returns 3D array
+
+print('Loaded array hardeningM into RAM, shape:', hardeningM.shape)
+
+#BREAK
+
+    #================= PLOTTING HARDENING LAYER - STATIC =================
+    %matplotlib inline
+    import numpy as np
+    import matplotlib
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    #Center of space, requires odd number resolution for a true center
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+    
+
+    #Point of last unloading by index, will need a mapping algorithm to relate to deviatoric stresses
+    #Unloading x index should always be centered in space, may require stress rotation in driver 
+    #Do not have the y-index exceed cen_y, as it is redundant
+    
+    #Stress0 = np.array([ cen_y-int(cen_y/2), cen_x ])
+    #kappaM = kappaMatrix(res_x, res_y, minKappa, maxKappa)
+    #cart = hardeningMatrix(hh,mm,kappaM)
+    #kappaM = kappaMatrix(res_x, res_y, minKappa, maxKappa)
+    cart = hardeningM[:,:,cen_y-int(cen_y/2)]
+
+    hardeningline = cart[:,cen_x]
+    centerline = np.linspace(0,res_y,res_y)
+    fig, (ax1, ax2) = plt.subplots(1,2, sharey=True, gridspec_kw={'wspace': 0})
+
+    #Plot \kappa heatmap in deviatoric index view
+    extent = [0,res_x,res_y,0]
+    ax1.set_xlabel('X-Index',fontsize=14)
+    ax1.set_ylabel('Y-Index',fontsize=14)
+    ax1.set_ylim([res_y,0])
+    hardening_display = ax1.imshow(cart,cmap='cividis',interpolation='nearest', norm=matplotlib.colors.LogNorm(), extent=extent)
+    plt.colorbar(hardening_display)
+
+    #Plot centerline \kappa distribution in logspace
+    ax2.set_xlabel('Centerline H\' Value',fontsize=14)
+    ax2.set_xscale('log')
+    ax2.set_xlim([minKappa,int(np.amax(cart))])
+    ax2.set_ylim([res_y,0])
+    ax2.plot(hardeningline, centerline, color = 'black', antialiased=True)
+
+    # fit subplots and save fig
+    fig.tight_layout()
+    fig.set_size_inches(w=10,h=5)
+    fig_name = 'hardening_layer_visual'
+    fig.savefig(fig_name)
+
+    plt.show()
+
+    #===================================================================
+
+#BREAK
+
+def psiMatrix(hardeningMatrix):
+    #=====================================================================================
+    # psi Matrix creator for Borjas & Amies 1994 bounding surface constitutive model
+    #=====================================================================================
+    # Author: Justin K. Bonus, University of Washington
+    # Created: August 05, 2019
+    #
+    # Requires access to a previously computed H' matrix.
+    #=====================================================================================
+    
+    #First we must initialize the psiMatrix's full shape so we can overwrite
+    #values as we solve for psi at each index.
+    #Not doing so (i.e. appending layers iteratively) will cause issues with RAM
+
+    depth = hardeningMatrix.shape[1]*hardeningMatrix.shape[2]
+    print('Z depth of', depth, ',', hardeningMatrix.shape[2],' subgroups, with', depth/hardeningMatrix.shape[2], ' layers per subgroup.')
+    res_x = hardeningMatrix.shape[0]
+    cen_x = int(res_x/2)
+    
+    psiMatrix = np.zeros((hardeningMatrix.shape[1],hardeningMatrix.shape[0],depth))   
+    
+    # Vary Stress0 position
+    iter = 0
+    for k in range(0,hardeningMatrix.shape[2]):
+        print('Subgroup:', k)   
+        
+        # Vary CurStress position along centerline
+        for j in range(0, hardeningMatrix.shape[1]):                          
+            Hn = hardeningMatrix[j,cen_x,k]
+            #if Hn == 0:
+            #    continue
+            
+            # Vary NextStress position throughout layer
+            for i1 in range(0,hardeningMatrix.shape[0]):
+                for j1 in range(0,hardeningMatrix.shape[1]):
+                    # Solve \psi at \sigma'_{n+1} relative to \sigma'_{n} and Stress0
+                    Hn1 = hardeningMatrix[j1,i1,k]
+                    psiMatrix[j1,i1,iter] = (2*G)/(1 + 3*G*((1-beta)/Hn + (beta)/Hn1))
+            iter = iter+1
+    return psiMatrix
+
+#BREAK
+
+#============================
+psiM = psiMatrix(hardeningM)
+#============================
+
+# Write array to disk
+with open('psiMatrix.txt', 'w') as outfile:
+    # Text header for readibility
+    outfile.write('# Array shape: {0}\n'.format(psiM.shape))
+
+    # Iterating through a ndimensional array produces slices along
+    # the last axis. This is equivalent to data[i,:,:] in this case
+    for data_slice in psiM:
+
+        # Left-justified columns 7 characters in width, 8 decimal places.  
+        np.savetxt(outfile, data_slice, fmt='%-2.4f')
+
+        # Layer breaks using '#', won't be read by loadtxt()
+        outfile.write('# \n')
+
+# Remove array from RAM
+psiM = None 
+
+print('psiMatrix.txt saved to disk and removed from RAM.')
+
+#BREAK
+
+# Read the array from disk
+cen_y = int(np.floor(res_y/2))
+depth = cen_y * res_y
+psiM = np.loadtxt('psiMatrix.txt').reshape((res_y,res_x,depth)) # Returns 3D array
+
+print('Loaded array psiM into RAM, shape:', psiM.shape)
+
+#BREAK
+
+    #================= PLOTTING PSI LAYER - STATIC =================
+    %matplotlib inline
+    import numpy as np
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    #Center of space, requires odd number resolution for a true center
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+    
+    #h=StaticParam.G
+    #m=1
+    
+    #Point of last unloading by index, will need a mapping algorithm to relate to deviatoric stresses
+    #Unloading x index should always be centered in space, may require stress rotation in driver 
+    #Do not have the y-index exceed cen_y, as it is redundant
+    
+    #Stress0 = np.array([ cen_y-int(cen_y/2), cen_x ])
+
+    cart = psiM
+    unloading = int(res_y/2)-int(res_y/4) #range(0,int(res_y/2)-2)
+    layer = (int((res_y/2))) + unloading*(res_y-1) #int(res_y/2) + n*res_x gives 2G max value
+
+    cart = cart[:,:,layer]
+    psiline = cart[:,cen_x]
+    centerline = np.linspace(0,res_y,res_y)
+    fig, (ax1, ax2) = plt.subplots(1,2, sharey=True, gridspec_kw={'wspace': 0})
+
+    #Plot \kappa heatmap in deviatoric index view
+    extent = [0,res_x,res_y,0]
+    ax1.set_xlabel('X-Index',fontsize=14)
+    ax1.set_ylabel('Y-Index',fontsize=14)
+    ax1.set_ylim([res_y,0])
+    # Set values outside bounding surface to 'white' for visual puposes
+    cart = np.ma.masked_where(cart < minKappa, cart)
+    cmap = plt.cm.viridis
+    cmap.set_bad(color='white')
+    psi_display = ax1.imshow(cart,cmap=cmap,interpolation='nearest', extent=extent) #norm=matplotlib.colors.LogNorm()
+    plt.colorbar(psi_display)
+
+    #Plot centerline \kappa distribution in logspace
+    ax2.set_xlabel('Centerline $\psi$ Value',fontsize=14)
+    #ax2.set_xscale('log')
+    ax2.set_xlim([0, 2*G])
+    ax2.set_ylim([res_y,0])
+    ax2.plot(psiline, centerline, color = 'black', antialiased=True)
+
+    # fit subplots and save fig
+    fig.tight_layout()
+    fig.set_size_inches(w=10,h=5)
+    fig_name = 'psi_layer_visual'
+    fig.savefig(fig_name)
+
+    plt.show()
+
+    #===================================================================
+
+#BREAK
+
+%matplotlib inline
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+cen_x = int(np.floor(res_x/2))
+cen_y = int(np.floor(res_y/2))
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+X, Y = np.meshgrid(x, y)  # `plot_surface` expects `x` and `y` data to be 2D,
+surf = ax.plot_surface(X, Y, cart, cmap=cmap, antialiased=True, rstride=1, cstride=1, alpha=1)
+surf
+fig.colorbar(surf,shrink=0.5,aspect=20)
+
+#Make the panes transparent
+ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+
+#Make the grid lines transparent
+ax.set_axis_off()
+ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+fig.set_size_inches(w=10,h=10)
+plt.tight_layout
+plt.show()
+
+#BREAK
+
+def stressToIndex(stress, res_x, res_y, R, sliced=True):
+    #===============================================================
+    # Maps principal normal stress to \Pi-plane index notation
+    # Justin Bonus, Aug 5 2019
+    # 
+    # Output can be floating point or integer
+    #
+    # Remember that stresses are scaled down by sqrt(2/3) 
+    # when projected onto \pi-plane.
+    #===============================================================
+
+    dev_stress = dev(stress) # Projects stress onto \pi-plane (if not already)
+    
+    # Define index axis
+    unit_x = (np.array([[0],[-np.sqrt(1/2)],[np.sqrt(1/2)]])) # Stress-centered X-index axis
+    unit_y = (np.array([[-np.sqrt(3/2)+np.sqrt(3/2)/3],[np.sqrt(3/2)/3],[np.sqrt(3/2)/3]])) # Stress-centered Y-index axis
+    cen_x = int(res_x/2) # X-center of grid
+    cen_y = int(res_y/2) # Y-center of grid
+    step_x = 2*R/res_x # Length of a x grid-cell
+    step_y = 2*R/res_y # Length of a y grid-cell 
+    
+    # Project stress onto index axis'
+    x_part = -innerProduct(dev_stress,unit_x,1) #range(-R,R)
+    y_part = innerProduct(dev_stress,unit_y,1) #range(-R,R)   
+
+    # Floating index space
+    i = (x_part/step_x) + cen_x
+    j = (y_part/step_y) + cen_y
+    
+    if sliced == True:
+        # Convert to integer index space (Default)
+        i = int(np.round(i))
+        j = int(np.round(j))
+    
+    # Bound within array size
+    if i > res_x-1:
+        i = res_x-1
+    if j > res_y-1:
+        j = res_y-1
+    if i < 0:
+        i = 0
+    if j < 0:
+        j =0
+    
+    index = np.array([[i],[j]]) # 2x1 output
+    
+    return index
+
+#BREAK
+
+R=Su*(8/3)**0.5
+
+stress = np.array([[0],[0],[0]])
+print(stressToIndex(stress,101,101,R, sliced=False).reshape(2,))
+print()
+stress = np.array([[-np.sqrt(3/2)*R],[0],[0]])
+print(stressToIndex(stress,101,101,R).reshape(2,))
+print()
+stress = np.array([[0],[np.sqrt(1/2)*R],[-np.sqrt(1/2)*R]])
+print(stressToIndex(stress,101,101,R).reshape(2,))
+print()
+stress = np.array([[-np.sqrt(3/2)*R],[np.sqrt(1/2)*R],[-np.sqrt(1/2)*R]])
+print(stressToIndex(stress,101,101,R).reshape(2,))
+print()
+stress = np.array([[np.sqrt(3/2)*R],[-np.sqrt(1/2)*R],[np.sqrt(1/2)*R]])
+print(stressToIndex(stress,101,101,R).reshape(2,))
+print()
+stress = np.array([[np.sqrt(1/2)*R],[-np.sqrt(1/2)*R],[np.sqrt(1/2)*R]])
+print(stressToIndex(stress,101,101,R).reshape(2,))
+print()
+stress = np.array([[0.5*np.sqrt(3/2)*R],[0],[0]])
+print(stressToIndex(stress,res_x,res_y,R).reshape(2,))
+print()
+
+print(int(19.81))
+print(int(np.round(20.81)))
+
+#BREAK
+
+def angleNormal(u,v):
+    # Based on Olivier Verdier's script, May 13 2010
+    # Return angle between 3D principal normal stress vectors
+    # (0,180) range
+    # Input dev versions of vectors if you want angle on \Pi-plane
+    # Lacks angle sign, Nan return if zero vector used
+    u = u.reshape(3,)
+    v = v.reshape(3,)
+    c = np.dot(u,v)/np.linalg.norm(u)/np.linalg.norm(v) # Cos of the angle
+    angle = np.arccos(np.clip(c, -1, 1)) # Radian angle
+    return angle
+
+#BREAK
+
+def angleIndex(u,v):
+    # Based on MvG's script, May 14 2013
+    # Return angle between index-mapped vectors on the \Pi-plane
+    # (-180,180) degrees, relative to u
+    # For left-handed coordinate system (i.e. x right, y down, CW)(i left, j up, CCW)
+    u = u.reshape(2,) # [x,y]
+    v = v.reshape(2,) # [x,y]
+    dot = u[0]*v[0] + u[1]*v[1]
+    det = u[0]*v[1] - u[1]*v[0]
+    angle = np.arctan2(det,dot) # Angle in radians
+    return angle
+
+#BREAK
+
+res_x = 101
+res_y = 101
+cen_x = int(res_x/2)
+cen_y = int(res_x/2)
+
+R = 0.1
+
+stress = dev(np.array([[0.0],[0.0707],[-0.0707]]))
+dev_dStrain = dev(np.array([[0.00],[0.02],[-0.02]]))
+
+print('stress:',stress.reshape(3,))
+print('dev_dStrain:',dev_dStrain.reshape(3,))
+print('norm:',normS(dev_dStrain))
+midpoint = np.array([[50],[25]])
+print('midpoint:',midpoint.reshape(2,))
+print('')
+indexCurStress = stressToIndex(stress, res_x, res_y, R, sliced=False) # Float index space CurStress
+print('indexCurStress:',indexCurStress.reshape(2,))
+south = np.array([[0],[1]])
+
+adjMidpoint = midpoint - cen_y
+print('adjMidpoint:',adjMidpoint.reshape(2,))
+
+adjIndexCurStress = indexCurStress-cen_y
+adjIndexCurStress[1] = adjIndexCurStress[1] - adjMidpoint[1]
+
+print('adjIndexCurStress:',adjIndexCurStress.reshape(2,))
+theta = angleIndex(south, adjIndexCurStress) # Angle between float-index midpoint and CurStress
+#theta = np.pi - theta
+print('theta:',theta*180/np.pi)
+
+stressMidpoint = float(R * np.abs(midpoint[1] - cen_y) / cen_y)
+print('stressMidpoint:',stressMidpoint)
+stressMidpoint = dev(np.array([[np.sqrt(3/2)*stressMidpoint],[0.0],[0.0]]))
+print('stressMidpoint:',stressMidpoint.reshape(3,))
+print('norm:',float(normS(stressMidpoint)))
+
+#rotStress = quatHydroRotator(stress, theta)
+rotStrain = quatHydroRotator(dev_dStrain, -theta)
+print('rotStrain:',rotStrain.reshape(3,))
+print('norm:',normS(rotStrain))
+
+
+#BREAK
+
+# pip install numpy-quaternion
+# pip install numba
+# import numpy as np
+import quaternion as quat 
+
+#BREAK
+
+def quatRotator(v, axis, theta):
+    # Based on the code of henneray Jun 23 '17 and Nathaniel Aug 19 '18
+    # https://stackoverflow.com/questions/6802577/rotation-of-3d-vector
+    
+    # Uses quaternion methods to rotate 3D numpy vectors quickly
+    # Input: 
+    # v = vector, (3x1) or (1x3) shape
+    # axis = vector to rotate around, (3x1) or (1x3) shape
+    # theta = angle in radians to rotate clockwise by
+    
+    #import numpy as np
+    # pip install numpy-quaternion
+    # pip install numba
+    #import quaternion as quat 
+
+    #vector = np.array([0.] + v) #Add real component cell
+    rot_axis = np.array([0.] + axis) #Add real component cell
+    axis_angle = (theta*0.5) * rot_axis/np.linalg.norm(rot_axis)
+
+    vec = quat.quaternion(*v)
+    qlog = quat.quaternion(*axis_angle)
+    q = np.exp(qlog)
+
+    v_prime = q * vec * np.conjugate(q)
+    v_prime = v_prime.imag.reshape(3,1) #Remove real component and reshape
+    return v_prime
+
+def quatHydroRotator(v,theta):
+    #Faster method of quaternion rotation
+    #Very slightly more accurate due to explicitly written unitHydro
+    #Rotates only around the hydrostatic axis
+    import quaternion as quat
+    unitHydro = np.array([[0.],[np.sqrt(1/3)],[np.sqrt(1/3)],[np.sqrt(1/3)]])
+    #vector = np.array([0.] + v)
+    axis_angle = (theta*0.5) * unitHydro
+    
+    vec = quat.quaternion(*v)
+    qlog = quat.quaternion(*axis_angle)
+    q = np.exp(qlog)
+    
+    v_rot = q * vec * np.conjugate(q)
+    v_rot = v_rot.imag.reshape(3,1)
+    return v_rot
+
+#BREAK
+
+def psiSearch(dStrain, CurStress, res_x, res_y, R):
+    # Identify indices of \psi values on the input dStrain line
+    # Currently using Bresenham line formulation for efficiency
+    # Will never return indexes that exceed the resolution, but may be 'compressed'/'clipped' to fit
+    #
+    # INPUT:
+    # dStrain: 3x1 strain differential
+    # CurStress: 2x1 indexed stress state, UL-centered
+    # res_x, res_y: \Pi-plane index resolution
+    # R: Radius of Von-Mises cylinder/extent of index space
+    
+    from skimage.draw import line
+
+    # Find index-space center
+    cen_x = int(res_x/2)
+    cen_y = int(res_y/2)
+    rad = cen_y
+    
+    # Process stress state
+    #dev_CurStress = dev(CurStress)
+    dev_dStrain = dev(dStrain)
+    norm_dev_dStrain = normS(dev_dStrain)
+    small=10e-11 # Tolerance to prevent zero vector issues
+
+   # Check if dev_dStrain is zero vector AKA directionless
+    if norm_dev_dStrain < small:
+        # Map CurStress to center-centered index space
+        #indexCurStress = stressToIndex(dev_CurStress, res_x, res_y, R) - rad
+        indexCurStress = CurStress - rad
+        ext_dev_dStrain = np.array([[indexCurStress[0] + rad],[indexCurStress[1] + rad]])
+ 
+    else:
+        # Map to center-centered index space
+        #indexCurStress = stressToIndex(dev_CurStress, res_x, res_y, R) - rad
+        indexCurStress = CurStress - rad
+        indexDStrain = stressToIndex(dev_dStrain, res_x, res_y, R, sliced=False) - rad
+
+        #north = np.array([[np.sqrt(2/3)],[-np.sqrt(1/6)],[-np.sqrt(1/6)]])
+        #east = np.array([[0],[np.sqrt(1/3)],[-np.sqrt(1/3)]])
+        
+        #theta = angleNormal(east, dev_dStrain) # Angle from x-axis
+        #phi = angleNormal(north, dev_dStrain) # Angle from y-axis
+        #if phi <= np.pi/2:
+        #    theta = -theta # Sign theta properly
+        
+        north = np.array([[0],[1]])
+        east = np.array([[1],[0]])
+        theta = angleIndex(east, indexDStrain)
+        phi = angleIndex(north, indexDStrain)
+        
+        rotMatrix = np.array([[np.cos(theta), -np.sin(theta)],
+                              [np.sin(theta), np.cos(theta)]])
+        #invRotMatrix = np.array([[np.cos(theta), np.sin(theta)],
+        #                        [-np.sin(theta), np.cos(theta)]])
+        rotIndexCurStress = rotMatrix.T @ indexCurStress
+        ext_dev_dStrain = np.array([[rad*np.sin(np.arccos(rotIndexCurStress[1]/rad))], 
+                                    [rotIndexCurStress[1]]])
+        ext_dev_dStrain = rotMatrix @ (ext_dev_dStrain.reshape(2,1)) 
+        ext_dev_dStrain = ext_dev_dStrain + rad # Upperleft-recenter
+
+    # Map CurStress to upperleft-centered index space
+    indexCurStress = indexCurStress + rad
+
+    # Create Bresenham line coordinates
+    rr, cc = line(int(np.round(indexCurStress[1])), int(np.round(indexCurStress[0])), int(np.round(ext_dev_dStrain[1])), int(np.round(ext_dev_dStrain[0])))
+    
+    return rr, cc
+
+#BREAK
+
+# Visually demonstrate psiSearch() from \Pi-plane perspective
+# Minor issues in 2nd and 4th quadrant dStrain 
+# (search 1 too far and too few respectively)
+from skimage.draw import circle_perimeter
+
+R = 0.1
+res_x = 101
+res_y = 101
+cen_x = int(res_x/2)
+cen_y = int(res_y/2)
+
+# Don't allow normS(dStrain) > R
+dStrain = np.array([[0.00],[.0004],[.0001]])
+CurStress = np.array([[0.02],[0.0],[0.01]])
+
+dev_dStrain = dev(dStrain)
+norm_dev_dStrain = normS(dev_dStrain)
+
+south = np.array([[-np.sqrt(2/3)],[np.sqrt(1/6)],[np.sqrt(1/6)]])
+east = np.array([[0],[np.sqrt(1/2)],[-np.sqrt(1/2)]])
+angle = angleNormal(south, dev(CurStress)) # How much to rotate dStrain clockwise by, depends on CurStress
+theta = angleNormal(east, dev(CurStress))
+if theta < np.pi/2:
+    angle = -angle
+print('Angle:',angle*180/np.pi)
+if np.isnan(angle):
+    angle = 0
+
+factor = 1.
+if norm_dev_dStrain > R:
+    factor = R / norm_dev_dStrain
+dir_dev_dStrain = factor * dev_dStrain
+
+rotDStrain = quatHydroRotator(dir_dev_dStrain, -angle) # Rotated 3x1 dStrain to maintain relative distance to rotCurStress
+rotCurStress = quatHydroRotator(dev(CurStress), -angle) # 3x1 CurStress rotated to \Pi-plane centerline
+indexRotCurStress = stressToIndex(rotCurStress, res_x, res_y, R) # UL-centered indexed CurStress, on centerline
+
+rr, cc = psiSearch(rotDStrain, indexRotCurStress, res_x, res_y, R)
+
+img = np.zeros((res_y, res_x), dtype=np.uint8)
+xx, yy = circle_perimeter(cen_y,cen_x,cen_y)
+img[xx, yy] = 1 # Bounding Surface
+img[rr, cc] = 3 # Search Line
+img[rr[0], cc[0]] = 2 # Line Start
+img[rr[len(rr)-1], cc[len(cc)-1]] = 4 # Line End
+plt.imshow(img, cmap = 'hot')
+plt.show()
+
+#BREAK
+
+debugFlag = 1
+small = 1e-10
+CurKappa = 10
+
+NextStress0 = np.array([[0.2],[1],[-1]])
+dev_NextStress0 = dev(NextStress0)
+CurStress = np.array([[0],[2],[-2]])
+dev_CurStress = dev(CurStress)
+
+dStrain = np.array([[20],[-0.0],[0]])
+dev_dStrain = dev(dStrain)
+
+
+numerator = innerProduct((-(1 + CurKappa)*dev_CurStress - CurKappa*(1 + CurKappa)*(dev_CurStress - dev_NextStress0)), dev_dStrain, 3)
+denominator = innerProduct(( (1 + CurKappa)*dev_CurStress - CurKappa*dev_NextStress0), (dev_CurStress - dev_NextStress0), 1)
+print('numerator:', numerator)
+print('denominator:', denominator)
+
+if np.absolute(denominator) < small:
+    loadingCond = 0
+else:
+    loadingCond = numerator/denominator
+
+
+if loadingCond > 0.0:
+    if debugFlag == 1:
+        print('Unloading Happened')
+
+    NextStress0 = CurStress
+    dev_NextStress0 = dev(NextStress0)
+    loadingCond = 0
+
+
+#BREAK
+
+def precomputedBSRadialMap(dStrain, StaticParam, CurStress, CurState, dSixStrain):
+    # Radial Return Algorithm for J2 Bounding Surface Plasticity Model
+    # Original model by Borjas & Amies 1994
+    # Base radialmap by Pedro Arduino, Mar. 22 2019
+    # Copyright Arduino Computational Geomechanics Group
+    # Precomputed matrix enabled version by Justin Bonus, Jul. 2019
+    #
+    #
+    # Input:
+    #    dStrain               ... Strain differential, tn to tn+1
+    #    StaticParam.E         ... Young's modulus
+    #    StaticParam.v         ... poissons ratio
+    #    StaticParam.G         ... Shear modulus
+    #    StaticParam.K         ... Bulk modulus
+    #    StaticParam.hh        ... Kinematic Hardening parameter
+    #    StaticParam.mm        ... Kinematic hardening parameter
+    #    StaticParam.beta      ... Integration parameter (0=expl, 1=impl)
+    #    StaticParam. RR       ... Bounding surface radius
+    #    CurStress             ... Stress at tn
+    #    CurState.eP           ... Plastic strain at tn
+    #    CurState.alphaISO     ... Isotropic internal variable at tn
+    ##   CurState.alphaKIN     ... Kinematic internal variablen at tn
+    #    CurState.Stress0      ... Stress point at unloading
+    #
+    # Output:
+    #    NextStress            ... Stress at tn+1
+    #    CurState.eP           ... Plastic strain at tn
+    #    CurState.alphaISO     ... Isotropic internal variable at tn+1
+    #    CurState.alphaKIN     ... Kinematic internal variablen at tn+1
+    #    Cep                   ... Consistent tangent modulus
+
+    #Static Parameters
+    G = StaticParam.G
+    K = StaticParam.K
+    mm = StaticParam.mm
+    hh = StaticParam.hh
+    beta = StaticParam.beta
+    R = StaticParam.RR
+
+    tol_rel = 1.0e-10
+    meye = np.eye(3,1); meye[1]=1; meye[2]=1 
+    small = 1.0e-10 # Tolerance for small dStrain steps, AKA no stress change
+    debugFlag = 1 #Set 0 for true, 1 for false
+
+    dev_dStrain = dev(dStrain)
+    vol_dStrain = trace(dStrain)
+
+    dev_dSixStrain = dev(dSixStrain)
+    vol_dSixStrain = trace(dSixStrain)
+    
+    NextStress0 = CurState.Stress0 # Temporary, may be replaced by CurStress depending on dStrain
+    dev_NextStress0 = dev(NextStress0)
+    dev_CurStress = dev(CurStress)
+
+    #norm_dev_CurStress = normS(dev_CurStress)
+    #norm_dev_NextStress0 = normS(dev_NextStress0)
+
+    CurKappa = CurState.Kappa
+    CurPsi = CurState.Psi
+    # Assume next Kappa and Psi are current (will overwrite for loading)
+    NextKappa = CurKappa
+    NextPsi = CurPsi
+    NextalphaISO = CurState.alphaISO
+
+    # Unit-vectors
+    hydro = np.array([[np.sqrt(1/3)],[np.sqrt(1/3)],[np.sqrt(1/3)]]) # Hydrostatic axis unit-vector
+    north = np.array([[np.sqrt(2/3)],[-np.sqrt(1/6)],[-np.sqrt(1/6)]]) #\Pi-plane north unit-vector
+    east = np.array([[0],[np.sqrt(1/2)],[-np.sqrt(1/2)]]) #\Pi-plane east unit-vector
+    south = -north
+    
+    
+    # Might need to check if this even works for 3x1 principal stress form
+    numerator = innerProduct((-(1 + CurKappa)*dev_CurStress - CurKappa*(1 + CurKappa)*(dev_CurStress - dev_NextStress0)), dev_dStrain, 3)
+    denominator = innerProduct(( (1 + CurKappa)*dev_CurStress - CurKappa*dev_NextStress0), (dev_CurStress - dev_NextStress0), 1)
+    #print('numerator:', numerator)
+    #print('denominator:', denominator)
+
+    if np.absolute(denominator) < small:
+        loadingCond = 0
+    else:
+        loadingCond = numerator/denominator
+
+    if loadingCond > 0.0:
+        if debugFlag == 1:
+            print('Unloading Happened')
+            NextStress0 = CurStress
+            dev_NextStress0 = dev(NextStress0)
+            loadingCond = 0
+    else:
+        loadingCond = 0
+    #=================================
+    # -----INDEX MAPPING AND ROTATIONS
+
+    # Change these to passed values
+    res_x = 101
+    res_y = 101
+    cen_x = int(np.floor(res_x/2))
+    cen_y = int(np.floor(res_y/2))
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    unloaded = 0
+    unloading = True # Set to True in order to enter while loop
+    # While true the stress is considered to be unloading, when false it is considered loading
+    
+    #while unloading == True:
+    if loadingCond == 0:
+        # Check if zero vector (breaks angle-finders), set angles accordingly
+        if np.all(NextStress0 == 0):
+            northUnloadingAngle = 0.
+            eastUnloadingAngle = 0.
+        else:
+            northUnloadingAngle = angleNormal(north, dev_NextStress0)
+            eastUnloadingAngle = angleNormal(east, dev_NextStress0)
+        #print('northUnloadingAngle',northUnloadingAngle*180/np.pi)
+        #print('eastUnloadingAngle',eastUnloadingAngle*180/np.pi)
+
+        # Check if the unloading stress is west or east of centerline
+        if eastUnloadingAngle > np.pi/2:
+            northUnloadingAngle = -northUnloadingAngle
+            #print('northUnloadingAngle',northUnloadingAngle*180/np.pi)
+
+        # Rotate and map stress state to index notation
+        northNextStress0 = quatHydroRotator(dev_NextStress0, -northUnloadingAngle)
+        northCurStress = quatHydroRotator(dev_CurStress, -northUnloadingAngle)
+        indexNorthNextStress0 = stressToIndex(northNextStress0, res_x, res_y, R)
+        indexNorthCurStress = stressToIndex(northCurStress, res_x, res_y, R)
+
+
+        # Access H' Matrix
+        #=========================
+        # int(res_y/2) layers (AKA cen_y), corresponds to variation of 
+        # NextStress0 from center to top, range(cen_y,res_y)
+
+        # H' is too short in z-direction by 1 or 2 layers? Should fix
+        # Might be slicer interpreting very edge as outside index
+        if indexNorthNextStress0[1] == 0:
+            indexNorthNextStress0[1] = 1
+        layerH = cen_y - indexNorthNextStress0[1]
+        cartH = hardeningM[:,:, layerH] # Holds relevant H' matrix layer
+        unloadingH = cartH[indexNorthNextStress0[1],indexNorthNextStress0[0]] # Check that H' at unloading is max for debugging
+        
+
+        if unloaded == 0:
+            CurH = cartH[indexNorthCurStress[1], indexNorthCurStress[0]] # Determine current H', could pass between time-step
+            unloaded = unloaded + 1 # Prevents CurH reset when resetting unloading point
+        
+        
+        # Access \psi Matrix
+        # ========================
+        # Will need to open appropiate \psi submatrix for NextStress0 and 
+        # find layer containing the appropiate CurH position.
+        # Then search for paired psi and NextH to satisfy formula 
+        #
+        # int(np.floor(res_x/2)) sub groups in z-direction (cen_y),
+        # corresponding to NextStress0 variation starting from center r(cen_y,res_y)
+        #
+        # res_y layer in each subgroup, corresponds to CurStress variation
+        # from bottom to top, range(0,res_y)
+
+        n = cen_y - indexNorthNextStress0[1] # Subgroup to access
+        #print('psi subgroup:',n, 'of', cen_y-1)
+        zP0 = int(n*res_y) # Start of subgroup
+        zP1 = zP0 + res_y # End of subgroup ? -1
+        subP = psiM[:,:,zP0:zP1] # Assign subgroup
+        res_h = 1e6 # Tolerance for rotated centerline CurStress H' value
+        tol_h = 1e-2 # Tolerance for rotated centerline CurStress H' value
+        Iter_H = 0 # Track H' centerline match iterations
+        #coords = np.array([[cen_x],[cen_y]]) # Initialize CurH centerline coordinates for debugging
+
+        # Iterate through layers of subgroup
+        # res_y - int(indexNorthNextStress0[1])
+        #for jc in range(0, cen_y):
+        #    jb = (res_y-1)-jc # Make it search bottom to top, may want to use 'enumerate' instead
+            #south_j = jc + cen_y # Search south of center
+            #north_j = cen_y - jc # Search north of center
+        #    testH = cartH[jb,cen_x]
+            #south_testH = cartH[south_j,cen_x]
+            #north_testH = cartH[north_j,cen_x]
+        #    if testH == 0:
+        #        continue
+        #    hold = np.abs(testH - CurH) # CurH difference value
+        #    Iter_H = Iter_H+1
+        #    if hold < res_h:
+        #        res_h = hold # Update res_h
+        #        layerP = jc #Select layer when tolerance is met
+        #        coords[1] = jb # Coordinates of CurH on nearest centerline cell match, basically uncentered rotation 
+        #    if hold <= tol_h:
+        #        break
+                
+        CurKappa = float((CurH/hh)**(1/mm)) # Backcalculated \kappa value, depends on hardening function
+        #print('indexNorthNextStress0',indexNorthNextStress0)
+        midpoint = float(cen_y - (CurKappa * (cen_y - indexNorthNextStress0[1]))/(CurKappa + 1)) # 1D Midpoint of \kappa contour
+        midpoint = np.array([[cen_x],[midpoint]]) # Float index space
+        radius = ((float(midpoint[0]-indexNorthCurStress[0])**2 + float(midpoint[1]-indexNorthCurStress[1])**2)**0.5) # Distance from contour midpoint to CurStress
+        #print('midpoint:',midpoint.reshape(2,))
+        #print('radius:',radius)
+        indexRotCurStress = np.array([[cen_x],[int(np.round(midpoint[1] + radius))]]) # South aligned
+        layerP = int(np.round(midpoint[1])) # y-cell of midpoint
+        Iter_H = int(np.round((res_y-1) - midpoint[1]))
+        cartP = subP[:,:,layerP] # Hold \psi matrix layer in RAM
+        
+        
+        tol_R = 1e-5 # Tolerance for equation 37?
+        hold_R = 1e6 # Initialize tolerance comparison eq. 37
+        res_search = 1e-6 # Tolerance for equation 36?
+        hold_search = 1e6 # Initialize tolerance comparison eq. 36
+        indexNextH = np.array([[0],[0]]) # Initialize array
+        indexPsi = np.array([[0],[0]]) # Initialize array
+
+        south = np.array([[0],[1]])
+        indexNorthCurStress = stressToIndex(northCurStress, res_x, res_y, R, sliced=False) # Float index space CurStress
+        adjMidpoint = midpoint - cen_y # Recenter
+        adjIndexNorthCurStress = indexNorthCurStress - cen_y # Recenter
+        adjIndexNorthCurStress[1] = adjIndexNorthCurStress[1] - adjMidpoint[1] # Offest for relative distance
+        theta = angleIndex(south, adjIndexNorthCurStress) # Angle between south and float-index CurStress
+        if np.isnan(theta):
+            angle = 0
+            
+        #stressMidpoint = float(R * np.abs(midpoint[1] - cen_y) / cen_y)
+        #stressMidpoint = dev(np.array([[np.sqrt(3/2)*stressMidpoint],[0.0],[0.0]]))
+        rotDStrain = quatHydroRotator(dev_dStrain, -theta) # Rotate dev_dStrain around contour
+
+        #south = np.array([[0],[1]])
+        #phi = angleIndex(midpoint, indexNorthCurStress) # Angle to rotate dStrain by to reach centerline position
+        #theta = angleIndex(midpoint, dCurStress)
+        #if theta < np.pi/2:
+        #    angle = -angle
+        #if np.isnan(angle):
+        #    angle = 0 # Incase dev_CurStress is zero vector
+        #rotDStrain = quatHydroRotator(dev_dStrain, -angle)
+
+        rr, cc = psiSearch(rotDStrain, indexRotCurStress, res_x, res_y, R) # Output coordinates to search, rotDStrain direction
+        stop = 3 # How many points to evaluate on search line
+        stop = np.linspace(0, stop-1, stop) 
+        #print('rr:',len(rr))
+        Iter_Psi = 0 # Reset iterations
+        # Search line for correct \psi and H' pair
+        psi = 2*G
+        for j, i, s in zip(rr,cc, stop):
+            psi = cartP[j,i]
+            NextH = np.ndarray.item(cartH[j,i])
+            # Skip cells on or outside of bounding surface, could be more elegant
+            if NextH == 0:
+                continue
+            NextKappa = float((NextH/hh)**(1/mm)) # Backcompute kappa from hardening value
+            
+            # Solve base equation, zero res_search and res_R means pairing matches true function
+            #res_search = (2*G)/(1 + 3*G*(((1-beta)/CurH) + (beta)/NextH)) - psi
+            res_R = np.abs(np.linalg.norm(dev_CurStress + psi*dev_dStrain + NextKappa*(dev_CurStress + psi*dev_dStrain - dev_NextStress0))-R)
+            Iter_Psi = Iter_Psi + 1
+
+            #If in an acceptable range of true solution, break loop to save time
+            #if res_R <= tol_R:
+            #    flag = 0
+            #    break
+
+            #Hold best solution if one below tolerance isn't found
+            #Driving by res_R at the moment to capture dStrain effects, may need res_search as well
+            if res_R < hold_R:
+                hold_search = res_search
+                hold_R = res_R
+                hold_NextH = NextH
+                hold_psi = psi
+                hold_Iter_Psi = Iter_Psi
+                hold_NextKappa = NextKappa
+                flag = 1
+
+            
+        # If tolerances were not met, give the best pair found
+        if flag == 1:
+            NextH = hold_NextH
+            psi = hold_psi
+            Iter_Psi = hold_Iter_Psi
+            NextKappa = hold_NextKappa
+            res_R = hold_R
+            res_search = hold_search
+        #print('$\psi$ line search iterations:', Iter_Psi, 'of max', len(rr))
+        
+        # Check if hardening moduli is increasing (AKA unloading)
+        #if NextH > CurH:
+            # The new H' is greater than the previous, hence we are unloading
+            #unloading = True
+            #print('Unloading happened')
+            # Set the unloading point to the current stress point
+            #NextStress0 = CurStress
+            #dev_NextStress0 = dev(NextStress0)
+            #CurH = hh*maxKappa**(1/mm)
+           #unloaded = 1
+        #if NextH == CurH:
+            # dStrain wasn't large enough to exit current index
+            # Treat as if it is normal loading
+        #    unloading = False
+        #else:
+            # The new H' is less than the previous, hence we are loading normally
+        #    unloading = False
+            
+            
+#        if unloaded > 1:
+#            # Prevent more than one stress point reset [Redundant]
+#            unloading = False
+            
+        # Check if both unloading conditions are met, exit while otherwise
+        #if unloading1 == True and unloading2 == True:
+        #    NextStress0 = CurStress
+        #    dev_NextStress0 = dev(NextStress0)
+        #    print('Unloading happened')
+        #    unloading = True
+        #else:
+        #    unloading = False
+
+        #unloading = False
+        
+    # Constitutive equation: Solve for \sigma_{n+1}
+    NextStress = CurStress + K*vol_dStrain*meye + psi*dev_dStrain
+    
+    verbose = False
+    
+    if verbose:
+        print('')
+        print('PAIR RESULTS')
+        if flag == 1:
+            print('Pair search exceeded tolerances, retained solution displayed')
+        if flag == 0:
+            print('Pair search met tolerances, solution displayed')
+        print('CurH: ', CurH)
+        print('Pair iterations:', Itera_Psi)
+        print('Final res_R: ', res_R)
+        print('Final res_search: ', res_search)
+        print('NextKappa: ',NextKappa)
+        print('psi: ', psi)
+        print('NextH: ', NextH)
+        print('')
+        print('')
+        print('CURRENT STRESS STATE')
+        print('NextStress0:', NextStress0.reshape(1,3))
+        print('dev_NextStress0:',dev_NextStress0.reshape(1,3))
+        print('CurStress:', CurStress.reshape(1,3))
+        print('dev_CurStress:',dev_CurStress.reshape(1,3))
+        print('DRIVER')
+        print('dStrain:', dStrain.reshape(1,3))
+        print('dev_dStrain:',dev_dStrain.reshape(1,3))
+        print('UPDATED STRESS STATE')
+        print('NextStress:', NextStress.reshape(1,3))
+        print('dev_NextStress:',dev_NextStress.reshape(1,3))
+        print('Approach to bounding surface:', 100*normS(dev_NextStress)/R, '%')
+        print('')
+    
+    # Update State
+    state = namedtuple('state', ['eP','alphaISO', 'Stress0', 'Iter_H', 'Iter_Psi', 'Kappa', 'H', 'Psi'])
+    NextState = state(0, NextalphaISO, NextStress0, Iter_H, Iter_Psi, NextKappa, NextH, psi)
+
+    
+    return NextStress, NextState
+
+#BREAK
+
+from collections import namedtuple
+
+# Static Parameters
+E = 20 #Elastic Modulus  MPa
+v= 0.49 #Poissons ratio, less than 0.5 to allow compresibility
+G = E/(2*(1+v)) #Shear modulus
+K = E/(3*(1-2*v)) #Bulk modulus
+Kmod = 0 #Isotropic Hardening
+Su = 0.061 #Yield stress in 1-D tension test MPa
+hh = G #kinematic hardening parameter
+mm = 1.0 #kinematic hardening parameter
+beta = 0.5 #midpoint integration
+RR = np.sqrt(8/3)*Su
+#namedtuple used to organzie related variables, similar to a structure
+static = namedtuple('StaticParam',['E','v','G','K','Kmod','Su','hh','mm','beta','RR'])
+StaticParam = static(E,v,G,K,Kmod,Su,hh,mm,beta,RR)
+
+# Initialize the state variables
+StrainDriven = True
+if StrainDriven:
+    IniStress = 0.0*(np.array([1, 1, 1]).reshape(3,1))
+    #IniStrain = np.linalg.solve(GetCe(StaticParam), IniStress) #Check if GetCe compacts to nxn
+    IniStrain =  0.0*(np.array([1, 1, 1]).reshape(3,1))  
+elif StressDriven:
+    IniStress =  0.0*(np.array([1, 1, 1]).reshape(3,1))
+    IniStrain =  0.0*(np.array([1, 1, 1]).reshape(3,1))   
+
+#Structure for IniState (initial state parameters, static) and CurState (changing state parameters)
+eP = 0.0*(np.array([1, 1, 1]).reshape(3,1))
+alphaISO = 0.0  
+Stress0 = 0.01*(np.array([1, 0, 0]).reshape(3,1))
+Kappa = 1e6
+Psi = 2*StaticParam.G
+state = namedtuple('state', ['eP','alphaISO','Stress0', 'Kappa', 'Psi']) # Add H
+IniState = state(eP, alphaISO, Stress0, Kappa, Psi)
+
+# For first iteration
+CurStress = IniStress
+CurStrain = IniStrain
+CurState  = IniState
+
+IniState = state(eP, alphaISO, Stress0, Kappa, Psi)
+CurStress = IniStress
+CurStrain = IniStrain
+CurState  = IniState
+dStrain = np.array([[0.0],[-0.01],[-0.01]])
+dSixStrain = np.array([[0],[0],[0],[0],[0],[0]])
+
+NextStress, NextState = precomputedBSRadialMap(dStrain, StaticParam, CurStress, CurState, dSixStrain)
+print('NextStress:',NextStress.reshape(3,))
+print('dev_NextStress:',dev(NextStress).reshape(3,))
+print('NextState:',NextState)
+
+#BREAK
+
+def precomputedBSDriver(LoadCase):
+    # Precomputed Matrix Enabled BoundingSurface J2 with kinematic hardening 
+    # Base driver by Pedro Arduino, Mar. 22 2019
+    # Copyright Arduino Computational Geomechanics Group
+    # Precomputed solution matrice version by Justin Bonus, Aug. 2019
+    #
+    #
+    # LoadCase:
+    #    1 ... proportionally increasing strain
+    #    2 ... cyclic strain
+    #    3 ... proportionally increasing stress
+    #    4 ... cyclic stress
+    #
+    # ======  LOADING CASES ==================================================
+    
+    import numpy as np
+    from collections import namedtuple
+    
+    nPoints = 101
+
+    ## Switch for LoadCases:
+    ## Pseudo-switch created by using python dictionary to hold LoadCase functions
+    def case_one():
+        case_one.time   = np.linspace(0,1,nPoints+1)
+        case_one.strain = np.array([ 0.02, -0.006, -0.006]).reshape(3,1) * case_one.time
+        case_one.StressDriven = 0
+        return case_one
+    def case_two():
+        nCycles = 3
+        omega   = 0.15
+        case_two.time   = np.linspace(0,nCycles*2*np.pi/omega,nCycles*nPoints+1)
+        case_two.sixStrain = np.array([ 0.00, -0.000, -0.000, 0.020, 0.000, 0.000 ]).reshape(6,1) * np.sin( omega*case_two.time )    
+        case_two.strain = np.zeros((3,len(case_two.time)))
+        for i in range(0,len(case_two.time)):
+            p1, p2, p3 = princVal(case_two.sixStrain[:,i], 0)
+            princ = np.array([p1,p2,p3])
+            case_two.strain[:,i] = princ
+        #case_two.strain = np.array([ 0.010, -0.000, 0.000]).reshape(3,1) * np.sin( omega*case_two.time )      
+        case_two.StressDriven = 0 
+        return case_two
+    def case_three():
+        nCycles = 3
+        omega = 0.15
+        case_three.time = np.linspace(0,nCycles*2*np.pi/omega,nCycles*nPoints+1)
+        case_three.strain = np.array([0.005, 0.0, -0.003]).reshape(3,1) * np.sin( omega*case_three.time )    
+        case_three.sixStrain = np.array([0.,0.,0.,0.,0.,0.]).reshape(6,1) * np.sin( omega*case_three.time )    
+        case_three.StressDriven = 0
+        return case_three
+    #def case_three():
+    #    case_three.time   = np.linspace(0,1,nPoints+1)       
+    #    case_three.stress = np.array([[0.100],
+    #                       [0.000],
+    #                       [0.000]])*case_three.time + 0.0*np.array([1,1,1]).reshape(3,1)*np.ones( case_three.time.shape )            
+    #    case_three.StressDriven = 1    
+    #    return case_three
+    def case_four():
+        nCycles = 3
+        omega   = 0.15
+        case_four.time   = np.linspace(0, nCycles*2*np.pi/omega, nCycles*nPoints+1)
+        case_four.stress = np.array([[0.000],
+                           [0.000],
+                           [0.000]])*np.sin( omega*case_four.time ) + 0.0*np.array([1,1,1]).reshape(3,1)*np.ones( case_four.time.shape )            
+        case_four.StressDriven = 1          
+        return case_four
+
+    def case_five():
+        Su = 0.061 #Undrained shear strength, MPa
+        R = Su*(8/3)**0.5
+        nRevs = 10/3
+        nCycles = 3
+        omega   = 0.15
+        case_five.time = np.linspace(0, nCycles*2*np.pi/omega, nCycles*nPoints)
+
+        p = np.linspace(0,nRevs*2*np.pi,nCycles*nPoints)
+        a = 3*R
+        k = R*np.sqrt(2)/2
+
+        # Spiral
+        x=a*np.e**(k*p)*np.sin(p)
+        y=a*np.e**(k*p)*np.cos(p)
+        y = y-a; y = -y # Center and flip
+
+        case_five.strain = np.array([[np.sqrt(2/3)*0.01],[0],[0]])*y + np.array([[0],[(1/2)*0.01],[-(1/2)*0.01]])*x
+        case_five.strain = np.append(case_five.strain, np.flip(case_five.strain,1),1).reshape(3,2*nCycles*nPoints)
+        case_five.time = np.append(case_five.time,case_five.time[::-1])
+        case_five.sixStrain = np.array([0.,0.,0.,0.,0.,0.]).reshape(6,1) * np.sin( omega*case_five.time )  
+        #case_four.stress = np.array([[0.000],
+        #                               [0.000],
+        #                               [0.000]])*np.sin( omega*case_five.time ) + 0.0*np.array([1,1,1]).reshape(3,1)*np.ones( case_five.time.shape )            
+        case_five.StressDriven = 0
+        return case_five
+    
+    case_switcher = {
+        1: case_one,
+        2: case_two,
+        3: case_three,
+        4: case_four,
+        5: case_five
+    }    
+
+    case = case_switcher.get(LoadCase, lambda: "Invalid LoadCase")
+    case() #Runs the LoadCase function. Creates: case.time, case.strain | case.stress, case.StressDriven
+    time, StressDriven = case.time, case.StressDriven 
+    if StressDriven:
+        stress = case.stress
+        sixStress = case.sixStress
+        strain = np.zeros((3,1)) #initialize empty 3x1 strain numpy array for stress-driven scenario
+    else:
+        strain = case.strain
+        sixStrain = case.sixStrain
+        stress = np.zeros((3,1)) #initialize empty 3x1 stress numpy array for strain-driven scenario
+        
+    Stress0 = np.zeros((3,1)) #Initialize first 'unloading' point
+    StrainDriven = int(not StressDriven)
+
+    # ========================================================================
+    # ---- MATERIAL PARAMETERS
+    # Static Parameters
+
+    # Static Parameters
+    E = 20 #Elastic Modulus  MPa
+    v= 0.49 #Poissons ratio, less than 0.5 to allow compresibility
+    G = E/(2*(1+v)) #Shear modulus
+    K = E/(3*(1-2*v)) #Bulk modulus
+    Kmod = 0 #Isotropic Hardening
+    Su = 0.061 #Yield stress in 1-D tension test MPa
+    hh = G #kinematic hardening parameter
+    mm = 1.0 #kinematic hardening parameter
+    beta = 0.5 #midpoint integration
+    RR = np.sqrt(8/3)*Su # Make RR
+
+    #namedtuple used to organzie related variables, similar to a structure
+    static = namedtuple('StaticParam',['E','v','G','K','Kmod','Su','hh','mm','beta','RR'])
+    StaticParam = static(E,v,G,K,Kmod,Su,hh,mm,beta,RR)
+
+    # ========================================================================
+    # ---- PRECOMPUTED MATRICES
+    
+    # Load precomputed matrices
+    #if StrainDriven:
+    #    hardeningMatrix = hardeningMatrix(zxxx) ##
+    #    psiMatrix = psiMatrix(xxx)  ##
+    #elif StressDriven:
+    #    psiMatrix = psiMatrix(xxx) ##
+    
+    # Structure for passing index values between driver and radialmap
+    #indexes = namedtuple('indexes', ['indexCurStress', 'indexNextStress','indexStress0'])
+    #IniIndex = indexes(indexCurStress, indexNextStress, indexStress0)
+    
+    # For first iteration
+    #CurIndex = IniIndex
+    
+    # ========================================================================
+    # ---- INITIAL CONDITIONS
+
+    # Initialize the state variables
+    if StrainDriven:
+        IniStress = -0.0*np.array([1, 1, 1]).reshape(3,1)
+        #IniStrain = np.linalg.solve(GetCe(StaticParam), IniStress) #Check if GetCe compacts to nxn
+        IniStrain =  0.0*np.array([1, 1, 1]).reshape(3,1)
+        #IniStrain = 
+    elif StressDriven:
+        IniStress =  0.0*np.array([1, 1, 1]).reshape(3,1)
+        IniStrain =  0.0*np.array([1, 1, 1]).reshape(3,1)   
+
+    # Structure for IniState (initial state parameters, static) and CurState (changing state parameters)
+    state = namedtuple('state', ['eP','alphaISO','Stress0', 'Kappa', 'H', 'Psi'])
+ 
+    eP = 0.0*(np.array([1, 1, 1]).reshape(3,1))
+    alphaISO = 0.0  
+    Stress0 = 0.0*(np.array([1, 1, 1]).reshape(3,1))
+    Kappa = 1e6 #maxKappa
+    H = StaticParam.hh*Kappa**StaticParam.mm
+    Psi = 2*StaticParam.G
+    IniState = state(eP, alphaISO, Stress0, Kappa, H, Psi)
+
+    # For first iteration
+    CurStress = IniStress
+    CurStrain = IniStrain
+    CurState  = IniState
+
+    # Variables used for plotting
+    alphaISO_plot, j2_plot, j2e_plot, stress_var_plot, stress_var2_plot = [],[],[],[],[] #Initiliaze list format
+    kappa, H, psi = [],[],[]
+    alphaISO_plot.append(0) #Python list appending for easy data addition, could be faster if array size was initialized entirely
+    strain[:,0] = CurStrain.T - IniStrain.T 
+    #sixStrain[:,0]
+    stress[:,0] = CurStress.T
+    j2_plot.append(0)
+    j2e_plot.append(0)
+    stress_var_plot.append(0)
+    Stress0[:,0] = CurStress.T
+    Iter_H = np.zeros(time.shape)
+    Iter_Psi = np.zeros(time.shape)
+    
+    maxKappa = 10e5
+    maxH = StaticParam.hh*maxKappa**StaticParam.mm
+    maxPsi = 2*StaticParam.G
+    kappa.append(maxKappa)
+    H.append(maxH)
+    psi.append(maxPsi) # Max psi initially assumed
+
+
+    # ========================================================================
+    # ---- COMPUTATION CYCLES
+
+    if StrainDriven:
+        #StrainDriven
+        for i in range(1, (len(strain[0]) )):
+            #print('Iteration:',i)
+            NextStrain = strain[:,i] + IniStrain.T
+            dStrain = (strain[:,i] - strain[:, i-1]).reshape(3,1) #Driving variable
+            dSixStrain = (sixStrain[:,i]-sixStrain[:, i-1]).reshape(6,1) # 6x1 form
+            NextStress, NextState = precomputedBSRadialMap(dStrain, StaticParam, CurStress, CurState, dSixStrain)
+
+            # Update Stress, Strain, and State
+            CurStress = NextStress
+            CurState = NextState
+            
+            # Variables created for plotting purposes
+            alphaISO_plot.append(CurState.alphaISO)
+            stress = np.append(stress, CurStress, 1)
+            #j2_plot.append(GetJ2(CurStress)) Fix this for 3x1
+            j2_plot.append(0)
+            stress_var_plot.append(np.sqrt(2*j2_plot[i])*np.sqrt(3/2)*np.sign(stress[0,i] - stress[1,i]))
+            stress_var2_plot.append((stress[0,i] - stress[1,i]))
+            Stress0 = np.append(Stress0, CurState.Stress0, 1)
+            Iter_H[i] = CurState.Iter_H
+            Iter_Psi[i] = CurState.Iter_Psi
+            kappa.append(CurState.Kappa)
+            H.append(CurState.H)
+            psi.append(CurState.Psi)
+            
+    elif StressDriven:
+        # StressDriven driver
+
+        for i in range(0, len(stress[0])-1):
+
+            # initialize strain epsilon_{n+1}^{(0)} = eps_{n} using the old state
+            # (this is the initial approximation for eps_{n+1}
+            if i == 0:
+                # special settings for initial values at t_1
+                NextStrain = np.array([0,0,0]).reshape(3,1)
+                dStrain = np.array([0,0,0]).reshape(3,1)
+                CurState = IniState
+            else:
+                NextStrain = CurStrain
+                dStrain = np.array([0,0,0]).reshape(3,1)
+
+            NextStress, NextState = BSRadialMap(dStrain, StaticParam, CurStress, CurState)
+
+            # Update State variables for next step
+            CurStress = NextStress
+            CurStrain = NextStrain
+            CurState  = NextState
+
+            # Update variables for plotting purposes
+            strain = np.append(strain, CurStrain, 1)
+            alphaISO_plot.append(CurState.alphaISO)
+            #j2_plot.append(GetJ2(CurStress)) Fix this for 3x1
+            j2_plot.append(0)
+            stress_var_plot.append(np.sqrt(2*j2_plot[i])*np.sqrt(3/2)*np.sign(stress[3,i]))
+            Stress0 = np.append(Stress0, CurState.Stress0, 1)
+                                   
+    DriverOutput = namedtuple('DriverOutput',['StaticParam','time','sixStrain','strain','stress','alphaISO','j2','stress_var','stress_var2', 'Stress0', 'Iter_H', 'Iter_Psi', 'kappa', 'H', 'psi'])
+    DriverOutput = DriverOutput(StaticParam, time, sixStrain, strain, stress, alphaISO_plot, j2_plot, stress_var_plot, stress_var2_plot, Stress0, Iter_H, Iter_Psi, kappa, H, psi)
+    
+    return DriverOutput
+    
+    # =========================================================================
+
+#BREAK
+
+%%time
+StaticParam, time, sixStrain, strain, stress, alphaISO_plot, j2_plot, stress_var_plot, stress_var2_plot, Stress0, Iter_H, Iter_Psi, kappa, H, psi = precomputedBSDriver(5)
+
+#BREAK
+
+anidev = animateDeviatoricSurface(time, Stress0, stress, StaticParam.Su)
+anidev
+
+#BREAK
+
+fig, axes = plt.subplots(1, 2, figsize = (15,5))
+
+axes[0].plot(time, strain[0], label='$\epsilon_1$') 
+axes[0].plot(time, strain[1], label='$\epsilon_2$') 
+axes[0].plot(time, strain[2], label='$\epsilon_3$') 
+
+axes[0].set_title('Strain vs Time')
+axes[0].set_xlabel('Time [sec]')
+axes[0].set_ylabel('Strain [ ]')
+axes[0].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[0].set_xlim(0, time.max())
+axes[0].set_ylim(strain.min(), strain.max())
+
+axes[1].plot(time, stress[0], label='$\sigma_{1}$') 
+axes[1].plot(time, stress[1], label='$\sigma_{2}$') 
+axes[1].plot(time, stress[2], label='$\sigma_{3}$') 
+
+axes[1].set_title('Stress vs Time')
+axes[1].set_xlabel('Time [sec]')
+axes[1].set_ylabel('Stress [MPa]')
+axes[1].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[1].set_xlim(0, time.max())
+axes[1].set_ylim(stress.min(), stress.max())
+
+
+plt.show()
+
+#BREAK
+
+dev_strain, vol_strain = np.zeros((3,len(time))),np.zeros((3,len(time)))
+for i in range(len(time)):
+    dev_strain[:,i] = dev(strain[:,i].reshape(3,1)).reshape(3,)
+    vol_strain[:,i] = trace(strain[:,i].reshape(3,1))
+dev_stress, vol_stress = np.zeros((3,len(time))),np.zeros((3,len(time)))
+for i in range(len(time)):
+    dev_stress[:,i] = dev(stress[:,i].reshape(3,1)).reshape(3,)
+    vol_stress[:,i] = trace(stress[:,i].reshape(3,1))
+    
+fig, axes = plt.subplots(1, 2, figsize = (15,5))
+
+print(dev_strain.shape)
+print(dev_stress.shape)
+print(len(time))
+
+axes[0].plot(time, dev_strain[0], label='$\gamma_{23}$') 
+axes[0].plot(time, dev_strain[1], label='$\gamma_{13}$') 
+axes[0].plot(time, dev_strain[2], label='$\gamma_{12}$') 
+
+axes[0].set_title('Deviatoric Strain vs Time')
+axes[0].set_xlabel('Time [sec]')
+axes[0].set_ylabel('Deviatoric Strain [ ]')
+axes[0].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[0].set_xlim(0, time.max())
+axes[0].set_ylim(dev_strain.min(), dev_strain.max())
+
+axes[1].plot(time, dev_stress[0], label='$\tau_{23}$') 
+axes[1].plot(time, dev_stress[1], label='$\tau_{13}$') 
+axes[1].plot(time, dev_stress[2], label='$\tau_{12}$') 
+
+axes[1].set_title('Deviatoric Stress vs Time')
+axes[1].set_xlabel('Time [sec]')
+axes[1].set_ylabel('Deviatoric Stress [MPa]')
+axes[1].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[1].set_xlim(0, time.max())
+axes[1].set_ylim(dev_stress.min(), dev_stress.max())
+
+plt.tight_layout()
+plt.show()
+
+#BREAK
+
+fig_strain = plt.figure()
+plt.plot(time, sixStrain[3], label='$\epsilon_{12}$') 
+plt.plot(time, sixStrain[4], label='$\epsilon_{23}$') 
+plt.plot(time, sixStrain[5], label='$\epsilon_{13}$') 
+    
+# Customize plot for readability
+plt.title(f'Deviatoric Strain vs Time')
+plt.xlabel('Time [sec]')
+plt.ylabel('Deviatoric Strain [ ]')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+plt.xlim(0, time.max())
+plt.ylim(sixStrain.min(), sixStrain.max())
+plt.show()
+
+#BREAK
+
+dev_stress, vol_stress = np.zeros((3,len(time))),np.zeros((3,len(time)))
+for i in range(len(time)):
+    dev_stress[:,i] = dev(stress[:,i].reshape(3,1)).reshape(3,)
+    vol_stress[:,i] = trace(stress[:,i].reshape(3,1))
+    
+fig_stress_time = plt.figure()
+plt.plot(time, dev_stress[0], label='$\sigma_{12}$') 
+plt.plot(time, dev_stress[1], label='$\sigma_{23}$') 
+plt.plot(time, dev_stress[2], label='$\sigma_{13}$') 
+
+plt.title(f'Stress vs Time')
+plt.xlabel('Time [s]')
+plt.ylabel('Stress [MPa]')
+plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")  # Legend outside plot
+#plt.xlim(strain.min(), strain.max())
+plt.ylim(dev_stress.min(), dev_stress.max())
+plt.show()
+
+#BREAK
+
+fig, axes = plt.subplots(1, 2, figsize = (15,5))
+
+axes[0].plot(vol_strain[0], vol_stress[0], label='$\sigma_{1}$') 
+axes[0].plot(vol_strain[1], vol_stress[1], label='$\sigma_{2}$') 
+axes[0].plot(vol_strain[2], vol_stress[2], label='$\sigma_{3}$') 
+
+axes[0].set_title('Normal Stress vs Normal Strain')
+axes[0].set_xlabel('Normal Strain [ ]')
+axes[0].set_ylabel('Normal Stress [MPa]')
+axes[0].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[0].set_xlim(vol_strain.min(), vol_strain.max())
+axes[0].set_ylim(vol_stress.min(), vol_stress.max())
+
+axes[1].plot(dev_strain[0], dev_stress[0], label='$\sigma_{12}$') 
+axes[1].plot(dev_strain[1], dev_stress[1], label='$\sigma_{23}$') 
+axes[1].plot(dev_strain[2], dev_stress[2], label='$\sigma_{13}$') 
+
+axes[1].set_title('Deviatoric Stress vs Deviatoric Strain')
+axes[1].set_xlabel('Deviatoric Strain [ ]')
+axes[1].set_ylabel('Deviatoric Stress [MPa]')
+axes[1].legend(bbox_to_anchor=(0.95,0.85), loc="center right")  # Legend outside plot
+axes[1].set_xlim(dev_strain.min(), dev_strain.max())
+axes[1].set_ylim(dev_stress.min(), dev_stress.max())
+
+plt.show()
+
+#BREAK
+
+fig, axes = plt.subplots(2, 2, figsize = (15,10))
+
+axes[0, 0].plot(time, kappa)
+axes[0, 0].set_title('$\kappa$ vs Time')
+axes[0, 0].set_xlabel('Time [s]')
+axes[0, 0].set_ylabel('$\kappa$ [ ]')
+axes[0, 0].set_xlim(time.min(), time.max())
+axes[0, 0].set_yscale('log')
+axes[0, 0].set_ylim(min(kappa), max(kappa))
+
+axes[0, 1].plot(time, H)
+axes[0, 1].set_title('$H\'$ vs Time')
+axes[0, 1].set_xlabel('Time [s]')
+axes[0, 1].set_ylabel('$H\'$ [ ]')
+axes[0, 1].set_xlim(time.min(), time.max())
+axes[0, 1].set_yscale('log')
+axes[0, 1].set_ylim(min(H), max(H))
+
+axes[1, 0].plot(time, psi)
+axes[1, 0].set_title('$\psi$ vs Time')
+axes[1, 0].set_xlabel('Time [s]')
+axes[1, 0].set_ylabel('$\psi$ [ ]')
+axes[1, 0].set_xlim(time.min(), time.max())
+axes[1, 0].set_ylim(min(psi), 2*StaticParam.G)
+
+axes[1, 1].plot(time, Iter_H, label = '$H\'$')
+axes[1, 1].plot(time, Iter_Psi, label = '$\psi$')
+axes[1, 1].set_title('Iterations vs Time')
+axes[1, 1].set_xlabel('Time [s]')
+axes[1, 1].set_ylabel('Iterations [ ]')
+axes[1, 1].set_xlim(time.min(), time.max())
+axes[1, 1].set_ylim(0, max(max(Iter_H),max(Iter_Psi)))
+axes[1, 1].legend(bbox_to_anchor=(0.95,0.85), loc="center right")
+#print(Iter_H)
+plt.show()
+
+#BREAK
+
+u, indexes, counts = np.unique(Stress0, axis = 1, return_index=True, return_counts = True)
+print(u)
+print(indexes)
+print(counts)
+print(Stress0.shape)
+
+#BREAK
